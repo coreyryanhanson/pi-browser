@@ -58,7 +58,16 @@
   silent single-page at runtime. `gatherAll` paginates
   to exhaustion under a per-guide / per-op `gatherAllMax` ceiling
   (default `1000`). Op-level `requiresAnyOf` declares an at-least-one-of
-  param group (single group per op, v1). `schemaVersion` frontmatter
+  param group (single group per op, v1). Op-level `errorPath` declares a
+  present-only-on-error envelope element inside a 200 body (OAI-PMH
+  `<error>`, SRU `<diagnostic>`, E-utilities `<ERROR>`, World Bank
+  `[{"message":[…]}]`): a resolution other than `undefined` after parse
+  fails the call with a structured `HelperError` (presence test, not
+  truthiness — `null`/`""`/`0`/`false` all fire; declared-absent is the
+  not-an-error signal), honored by both executors with parse-time guards
+  (non-empty string, tokenizeable, non-root, effective shape not `text`)
+  so a typo'd path fails in front of the author instead of silently
+  never firing. `schemaVersion` frontmatter
   (stamped on save by `api-learn`) drives breaking-change detection: a
   stale guide warns non-blockingly in `api-guide`/`api-fetch`, never
   gating the load. v1 is **GET-read only** — no mutation helper.

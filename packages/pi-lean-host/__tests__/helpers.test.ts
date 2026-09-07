@@ -347,6 +347,82 @@ async function createTestServer(): Promise<TestContext> {
 			return;
 		}
 
+		if (pathname === "/api/error-envelope/xml-error") {
+			// XML 200 error envelope: <error> present-only-on-error.
+			res.writeHead(200, { "Content-Type": "application/xml" });
+			res.end(
+				`<?xml version="1.0" encoding="UTF-8"?>\n<Response><error code="noResults">No records match</error></Response>`,
+			);
+			return;
+		}
+
+		if (pathname === "/api/error-envelope/xml-empty-error") {
+			// Empty XML element parses to "" — falsy-but-defined, must fire.
+			res.writeHead(200, { "Content-Type": "application/xml" });
+			res.end(
+				`<?xml version="1.0" encoding="UTF-8"?>\n<Response><error/></Response>`,
+			);
+			return;
+		}
+
+		if (pathname === "/api/error-envelope/json-error") {
+			// JSON 200 error envelope: message object present-only-on-error.
+			// Contains a known secret value for the scrub assertion.
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(
+				JSON.stringify({
+					ok: false,
+					message: { code: 100, value: "Invalid request sekrit-value" },
+				}),
+			);
+			return;
+		}
+
+		if (pathname === "/api/error-envelope/json-ok") {
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify({ ok: true, data: [{ id: 1 }, { id: 2 }] }));
+			return;
+		}
+
+		if (pathname === "/api/error-envelope/falsy") {
+			// Presence semantics: null / "" / 0 / false are defined values — all
+			// must fire. Query flag picks the shape; absence → clean success.
+			const val = url.searchParams.get("val");
+			const body: Record<string, unknown> = { data: [{ id: 1 }] };
+			if (val === "null") body["error"] = null;
+			if (val === "empty") body["error"] = "";
+			if (val === "zero") body["error"] = 0;
+			if (val === "false") body["error"] = false;
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(body));
+			return;
+		}
+
+		if (pathname === "/api/error-envelope/array") {
+			// Array envelope: success is [meta, records]; the error page is a
+			// single-element array whose only member is the message list —
+			// itemsPath ($.1) MISSES entirely on an error page.
+			const page = parseInt(url.searchParams.get("page") ?? "1", 10);
+			res.writeHead(200, { "Content-Type": "application/json" });
+			if (page === 2) {
+				res.end(
+					JSON.stringify([
+						{
+							message: [{ id: "120", key: "Invalid value", value: "bogoville" }],
+						},
+					]),
+				);
+			} else {
+				res.end(
+					JSON.stringify([
+						{ total: 4, page: 1, per_page: 2 },
+						[{ id: 1 }, { id: 2 }],
+					]),
+				);
+			}
+			return;
+		}
+
 		if (pathname === "/api/retry") {
 			const count = requestCounts.get(pathname) ?? 0;
 			if (count === 1) {
@@ -1874,6 +1950,195 @@ describe("non-2xx status handling", () => {
 			HelperError,
 		);
 	});
+});
+
+describe("errorPath — 200-with-error-envelope", () => {
+	let ctx: TestContext;
+
+	beforeAll(async () => {
+		ctx = await createTestServer();
+	});
+
+	afterAll(async () => {
+		await ctx.stop();
+	});
+
+	it("restGet: XML error envelope (present-only element) → HelperError naming the code", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/xml-error",
+			accept: "xml",
+			parse: { format: "xml", charset: "utf-8" },
+			errorPath: "Response.error",
+		});
+
+		try {
+			await restGet(ctx.serverUrl, op, {}, guide);
+			expect.fail("should have thrown");
+		} catch (e) {
+			expect(e).toBeInstanceOf(HelperError);
+			if (e instanceof HelperError) {
+				expect(e.field).toBe("response");
+				expect(e.message).toContain("Response.error");
+				expect(e.message).toContain("noResults");
+				expect(e.message).toContain("No records match");
+				expect(e.url).toBeDefined();
+			}
+		}
+	});
+
+	it("restGet: JSON error envelope → HelperError carrying the message; secrets scrubbed", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/json-error",
+			errorPath: "message",
+		});
+
+		try {
+			await restGet(ctx.serverUrl, op, {}, guide, {
+				secretValues: ["sekrit-value"],
+			});
+			expect.fail("should have thrown");
+		} catch (e) {
+			expect(e).toBeInstanceOf(HelperError);
+			if (e instanceof HelperError) {
+				expect(e.message).toContain("Invalid request");
+				expect(e.message).not.toContain("sekrit-value");
+				expect(e.url).toBeDefined();
+			}
+		}
+	});
+
+	it("restGet: declared-absent errorPath → normal success", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/json-ok",
+			errorPath: "error",
+		});
+
+		const result: RestGetResult = await restGet(ctx.serverUrl, op, {}, guide);
+		expect(result.data).toEqual({ ok: true, data: [{ id: 1 }, { id: 2 }] });
+	});
+
+	it('restGet: empty XML element (<error/>) parses to "" and fires', async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/xml-empty-error",
+			accept: "xml",
+			parse: { format: "xml", charset: "utf-8" },
+			errorPath: "Response.error",
+		});
+
+		await expect(restGet(ctx.serverUrl, op, {}, guide)).rejects.toThrow(
+			HelperError,
+		);
+	});
+
+	it('restGet: presence semantics — null / "" / 0 / false all fire, absent passes', async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const make = (path: string) => makeOp({ path, errorPath: "error" });
+
+		for (const val of ["null", "empty", "zero", "false"]) {
+			await expect(
+				restGet(
+					ctx.serverUrl,
+					make(`/api/error-envelope/falsy?val=${val}`),
+					{},
+					guide,
+				),
+			).rejects.toThrow(HelperError);
+		}
+		// Absent → declared-absent = not-an-error.
+		const ok: RestGetResult = await restGet(
+			ctx.serverUrl,
+			make("/api/error-envelope/falsy"),
+			{},
+			guide,
+		);
+		expect(ok.data).toEqual({ data: [{ id: 1 }] });
+	});
+
+	it("restGet: error message is capped", async () => {
+		// A huge envelope value must not flood the error output — the message
+		// is capped (generic capped stringify, same posture as
+		// checkResponseStatus's 500-char excerpt).
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/json-error",
+			errorPath: "message",
+		});
+
+		try {
+			await restGet(ctx.serverUrl, op, {}, guide);
+			expect.fail("should have thrown");
+		} catch (e) {
+			expect(e).toBeInstanceOf(HelperError);
+			if (e instanceof HelperError) {
+				expect(e.message.length).toBeLessThanOrEqual(600);
+			}
+		}
+	});
+
+	it("paginate: page-1 error page that misses itemsPath throws (never silent items: [])", async () => {
+		// The canonical placement-pin mock: the error page is a single-element
+		// array (array-envelope shape) so itemsPath "1" misses — a check
+		// mis-slotted below the exhaustion breaks would exit silently with
+		// items: [].
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/array",
+			errorPath: "0.message",
+			pagination: {
+				style: "page",
+				pageParam: "page",
+				itemsPath: "1",
+			},
+		});
+
+		await expect(
+			paginate(ctx.serverUrl, op, { page: "2" }, guide),
+		).rejects.toThrow(HelperError);
+	});
+
+	it("paginate: error envelope on a later page mid-gatherAll throws", async () => {
+		// Recorded tradeoff: an error page mid-walk throws, losing partial items
+		// (same fail-loud posture as checkResponseStatus).
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/array",
+			errorPath: "0.message",
+			pagination: {
+				style: "page",
+				pageParam: "page",
+				itemsPath: "1",
+			},
+		});
+
+		await expect(
+			paginate(ctx.serverUrl, op, { page: "1" }, guide, { gatherAll: true }),
+		).rejects.toThrow(HelperError);
+	});
+
+	it("paginate: declared-absent errorPath → normal walk succeeds", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/error-envelope/array",
+			errorPath: "error",
+			pagination: {
+				style: "page",
+				pageParam: "page",
+				itemsPath: "1",
+			},
+		});
+
+		const result = await paginate(ctx.serverUrl, op, { page: "1" }, guide);
+		expect(result.items).toEqual([{ id: 1 }, { id: 2 }]);
+	});
+
+	// /api verify interplay is structural: verify rides resolve-op → these
+	// same two executors, so an erroring op fails verify (strict threshold,
+	// no stamp) and a declared-absent errorPath keeps legitimately-empty
+	// runs passing — pinned here once, not re-tested in verify-command.
 });
 
 // ═══════════════════════════════════════════════════════════════════

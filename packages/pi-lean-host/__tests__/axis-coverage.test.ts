@@ -11,7 +11,8 @@
  *
  * It encodes the axis-set audit matrix:
  *  - the kept set has exactly the finalized 14 synthetic guides;
- *  - the union covers all seventeen guide-driven axes;
+ *  - the union covers all seventeen guide-driven axes (incl. the
+ *    `errorPath` error-envelope axis owned by dnb);
  *  - all six pagination styles are present (offset-limit, page, nextLink,
  *    cursor, resumptionToken, tokenBag);
  *  - all three realized auth kinds appear (none, static-key, oauth2).
@@ -234,6 +235,10 @@ describe("axis-coverage — every guide-driven axis is covered by ≥1 guide", (
 				Object.values(GUIDES).some((g) => g.pagination?.hasMorePath !== undefined),
 		).toBe(true);
 	});
+
+	it("error-envelope (an op declaring errorPath)", () => {
+		expect(allOps.some((o) => o.errorPath !== undefined)).toBe(true);
+	});
 });
 
 // Per-guide spot checks — each single-coverage axis maps 1:1 to a guide
@@ -273,6 +278,15 @@ describe("axis-coverage — single-coverage guide ownership", () => {
 		expect(
 			opOf(GUIDES["dnb"]).some((o) => o.pagination?.style === "resumptionToken"),
 		).toBe(true);
+	});
+
+	it("error-envelope is owned by dnb's oaiListRecords op (declared errorPath)", () => {
+		const op = opOf(GUIDES["dnb"]).find((o) => o.name === "oaiListRecords");
+		expect(op?.errorPath).toBe("OAI-PMH.error");
+		// The error path sits outside the itemsPath subtree — an OAI-PMH error
+		// page misses itemsPath entirely, which is what keeps the check
+		// meaningful despite running before the exhaustion breaks.
+		expect(op?.pagination?.itemsPath).not.toContain("error");
 	});
 
 	it("tokenBag is owned by wikimedia-action", () => {

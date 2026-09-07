@@ -126,6 +126,7 @@ and copy a domain folder that matches your target.
 | `operations[].transform` | op | `false` | `true` runs the helper's `transform` export on the parsed response (graceful — a throw returns raw data, never disables the op) |
 | `operations[].requiresAnyOf` | op | — | `[param, ...]` — at least one of these params must be supplied (single group per op, v1; members are plain optional params — not `required: true`, not `default`-bearing: both rejected at parse) |
 | `operations[].passthrough` | op | `false` | `true` forwards undeclared caller params onto the query string (for open-param APIs) |
+| `operations[].errorPath` | op | — | JSON path to a present-only-on-error envelope element in a 200 body; a resolved value that is anything other than `undefined` fails the call as a `HelperError` (see [Error envelopes](#error-envelopes-errorpath)) |
 | `operations[].parse` | op | inherits `responseShape` | op-level override of format/charset |
 | `operations[].pagination` | op | inherits top-level | op-level override of pagination |
 
@@ -228,6 +229,42 @@ documented upgrade path (`stopWhen`), not this field. Solr-shaped guides:
 `cursorMark` sends no boolean flag; its exhaustion is `numFound` vs.
 docs-fetched — don't author Solr-shaped guides against `hasMorePath`.
 
+#### Error envelopes (`errorPath`)
+
+`errorPath` is an **op-level**, style-agnostic field for APIs that report
+errors inside a **200 body** — OAI-PMH `<error code=…>`, SRU
+`<diagnostic>`, World Bank's `[{"message":[…]}]` array, E-utilities'
+`<ERROR>` element — which would otherwise read as success. After the
+response is parsed, `errorPath` is resolved against the parsed body (in
+both `restGet` and `paginate`; in `paginate` the check runs before the
+total-count read and the empty-page exhaustion breaks, so an error page
+that misses `itemsPath` entirely still fires instead of exiting silently
+with `items: []`).
+
+The presence test is **`!== undefined`, not truthiness** — the deliberate
+mirror of `hasMorePath`'s falsy-stops contract. An absent error is the
+not-error signal, so only `undefined` means absence here: `null`, `""`,
+`0`, and `false` all count as present and fire (an empty XML element
+`<error/>` parses to `""` — a real error shape, not success). Declare a
+path that exists **only on error** (Flickr's `message`, Google's
+`error_message`); a declared-then-absent path is the API's "not an error"
+signal. The resolved value is stringified into the error message (capped,
+known secret values scrubbed, request URL attached).
+
+Parse-time guards fail loud in front of the author (a typo'd path would
+otherwise silently behave as declared-absent — the exact confident-wrong
+failure this field exists to kill): non-string/empty values, malformed
+paths, root paths (`"$"`, `"."` — they resolve the entire body, so every
+call would fail), and any op whose effective response shape (its `parse`
+override, else the guide-level `responseShape`) is `format: "text"` are
+all `ParseError`s.
+
+Not expressible: value comparison (`status != "OK"`, `stat: "fail"`) —
+when an error rides the **same path** as valid data (arXiv's error
+`<entry>` shares `feed.entry` with real entries), no presence-only path
+can distinguish them; that needs a sentinel-matching extension that
+doesn't exist yet — don't author such an op against `errorPath`.
+
 Pagination blocks are **key-allowlisted per style**: only the keys listed
 for the style above (plus `totalCountPath` and `hasMorePath`) are accepted.
 An unknown key —
@@ -238,7 +275,7 @@ single-page at runtime.
 #### Path syntax (dot-splitting and the quoted-bracket escape hatch)
 
 Path fields (`itemsPath`, `nextLinkPath`, `cursorPath`, `tokenPath`,
-`totalCountPath`, `hasMorePath`) are dot-delimited: `data.items`,
+`totalCountPath`, `hasMorePath`, `errorPath`) are dot-delimited: `data.items`,
 `resultados[0].campo`, and
 numeric indexes (`items[2].id`). Negative indexes address from the end —
 `results[-1].id` is the last item's `id` (the derived-id cursor pattern); an

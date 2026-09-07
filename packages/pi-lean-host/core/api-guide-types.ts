@@ -341,6 +341,16 @@ export interface Operation {
 	transform?: boolean;
 	/** Op-level responseShape override. */
 	parse?: ResponseShape;
+	/**
+	 * JSON path to a present-only-on-error envelope element inside a 200 body.
+	 * After `parseResponse`, a resolution that is anything other than
+	 * `undefined` fails the call with a structured HelperError — presence is
+	 * the signal (`!== undefined`, not truthiness: `null`/`""`/`0`/`false`
+	 * all count as present). Declared-absent is the API's not-an-error signal.
+	 * Parse-time guards: non-empty string, tokenizeable, non-empty
+	 * tokenization, and an effective response shape that is not `text`.
+	 */
+	errorPath?: string;
 	/** Op-level pagination override (for `via: paginate`). */
 	pagination?: PaginationConfig;
 	/** Param names → target date format. Applied in buildQueryParams before serialization. */

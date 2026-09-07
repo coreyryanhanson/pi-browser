@@ -1967,6 +1967,110 @@ body
 // projectToGuide — strips recipe, retains presentation + kind
 // ═══════════════════════════════════════════════════════════════════
 
+// ═════════════════════════════════════════════════════════════════
+// errorPath — present-only-on-error envelope path
+// ═════════════════════════════════════════════════════════════════
+
+describe("parseApiGuide — errorPath", () => {
+	const base = (opBody: string, guideExtras = "") => `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+${guideExtras}
+operations:
+  - name: getThings
+    via: restGet
+    path: /things
+${opBody}
+---
+body
+`;
+
+	it("parses a valid errorPath onto the operation", () => {
+		const guide = expectOk(base("    errorPath: result.error"));
+		expect(guide.operations[0]!.errorPath).toBe("result.error");
+	});
+
+	it("accepts a quoted-bracket tokenizeable path", () => {
+		const guide = expectOk(base("    errorPath: result['error.message']"));
+		expect(guide.operations[0]!.errorPath).toBe("result['error.message']");
+	});
+
+	it("rejects a non-string errorPath", () => {
+		const err = expectErr(base("    errorPath: true"));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("non-empty string JSON path");
+	});
+
+	it("rejects an empty errorPath", () => {
+		const err = expectErr(base('    errorPath: ""'));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("non-empty string JSON path");
+	});
+
+	it("rejects a non-tokenizeable errorPath (malformed bracket)", () => {
+		// A malformed path would resolve `undefined` at runtime — declared-absent
+		// → success: the confidently-wrong failure mode this field exists to kill.
+		const err = expectErr(base('    errorPath: "results[-]"'));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("tokenizeable JSON path");
+	});
+
+	it("rejects an unterminated quoted bracket", () => {
+		const err = expectErr(base('    errorPath: "[\'oops]"'));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("tokenizeable JSON path");
+	});
+
+	it("rejects the root path ($) — empty tokenization", () => {
+		// The root resolves the entire parsed body — always defined post-parse,
+		// so every call would fail.
+		const err = expectErr(base('    errorPath: "$"'));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("document root");
+	});
+
+	it("rejects the bare-dot path (.) — empty tokenization", () => {
+		const err = expectErr(base('    errorPath: "."'));
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("document root");
+	});
+
+	it("rejects errorPath on an op with a text parse override", () => {
+		// parseResponse yields the raw body string for text ops — resolveJsonPath
+		// against a string always resolves undefined, so the check could never
+		// fire (declared-then-dead config indistinguishable from working config).
+		const err = expectErr(
+			base("    errorPath: error\n    parse:\n      format: text"),
+		);
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("format: text");
+	});
+
+	it("rejects errorPath on an op inheriting a text guide-level responseShape", () => {
+		// Same dead-config class via inheritance — the effective shape is
+		// parse ?? guide.responseShape, so the guard covers both.
+		const err = expectErr(
+			base("    errorPath: error", "responseShape:\n  format: text\n"),
+		);
+		expect(err.field).toBe("operations[0].errorPath");
+		expect(err.expected).toContain("format: text");
+	});
+
+	it("accepts errorPath with an xml parse override (xml resolves a shape)", () => {
+		const guide = expectOk(
+			base("    errorPath: error\n    parse:\n      format: xml"),
+		);
+		expect(guide.operations[0]!.errorPath).toBe("error");
+	});
+
+	it("accepts errorPath on an op without parse under a json guide responseShape", () => {
+		const ok = expectOk(
+			base("    errorPath: error", "responseShape:\n  format: json\n"),
+		);
+		expect(ok.operations[0]!.errorPath).toBe("error");
+	});
+});
+
 describe("projectToGuide", () => {
 	it("strips recipe fields and retains kind: api", () => {
 		const guide = expectOk(BOE_RECIPE, { filename: "boe.es" });

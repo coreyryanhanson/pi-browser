@@ -178,6 +178,21 @@ Read-only subcommands (`status`, `helpers`, bare `/api`) stay unguarded.
   directions); any future pagination field must be added to its style's
   allowlist in the same commit.
 - **No mutations v1**: `via` accepts only `restGet` and `paginate`.
+- **Error envelopes (`errorPath`)**: op-level optional field naming a path that,
+when it resolves to anything other than `undefined` in the parsed 200 body,
+fails the page with a structured `HelperError` (message capped, secret-scrubbed,
+redacted URL attached). Presence test is `!== undefined`, **not** truthiness —
+`null`/`""`/`0`/`false` all fire (opposite of `hasMorePath`); declared-absent is
+the not-an-error signal. Honored by both executors via one shared
+`checkErrorEnvelope` (`core/helpers.ts`): in `restGet` post-parse pre-transform;
+in the `paginate` loop as the **first statement after `parseResponse`** — before
+`totalCountPath` extraction and both exhaustion breaks, because error pages often
+miss `itemsPath` entirely and a later-placed check exits the walk silently with
+`items: []`. The parser rejects every declared-then-dead variant as `ParseError`:
+non-string/empty, non-tokenizeable, root (`$`/`.`), and effective response shape
+(`parse` override ?? guide-level `responseShape`) `format: "text"`. Presence-only
+by design — no value comparison; that's a recorded watch item, don't add it
+speculatively.
 - **Two distinct transform mechanisms** — do not conflate:
   - **Built-in post-response transform** (gated): an op declares `transform: true`
     to run a named `transform(data, ctx)` export from its `helper.ts` after
@@ -345,7 +360,9 @@ Read-only subcommands (`status`, `helpers`, bare `/api`) stay unguarded.
   host-only, no portal import, no listener, no inbound network surface),
   `transport.ts` (shared fetch pipeline: UA, charset, gzip/deflate
   response decompression, 429-retry, ETag cache —
-  the sanctioned way to reach even WAF'd hosts), `path-template.ts`,
+  the sanctioned way to reach even WAF'd hosts), `path-template.ts` (path
+  templating + the exported `tokenizeJsonPath`, shared by the parser and the
+  executor — the parser must never import the executor module),
   `ssrf-guard.ts`, `status-hint.ts` (shared 403 classifier — `serverMessage`
   extracts the server's reason, `isPlanGated` flags plan/subscription
   limitations; one implementation used by both `api-probe` and
@@ -434,7 +451,7 @@ axes **not** consolidated into `__tests__/axis-units.test.ts` (local-helper,
 transform, static-key-auth, multi-recipe-domains, resumptionToken, tokenBag,
 path-secret-auth [`telegram-bot`], oauth2, dotted-key [`frost-sensorthings`], numeric-cursor
 [`wikidata-search`], derived-id negative-index cursor [`inaturalist`],
-boolean hasMorePath [`stripe`]). The `oauth2` axis is carried by the sibling pair `twitch`
+boolean hasMorePath [`stripe`], error-envelope [`dnb`]). The `oauth2` axis is carried by the sibling pair `twitch`
 (client_credentials — auto-mint, Bearer + `Client-Id` `secretRefs` merge,
 no-refresh re-mint) + `twitch-user` (authorization_code — fail-closed
 `oauth_token_missing`, multi-grant slot coexistence) on the shared

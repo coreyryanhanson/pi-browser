@@ -5,11 +5,97 @@
  * and parse-api-guide.ts) so the executor (`restGet`/`paginate`), the
  * authoring tool (`api-probe`), and the parser share one implementation.
  *
+ * - `tokenizeJsonPath` — tokenize a JSON path into key/index segments.
+ *   Shared by the executor (`helpers.ts`) and the parser
+ *   (`parse-api-guide.ts`, which must not import the executor module) so
+ *   the path grammar exists exactly once.
  * - `extractPathTokens` — pull `{token}` names out of a templated path.
  * - `fillPathTemplate` — substitute `{token}` placeholders from params.
  * - `joinUrl` — join a base host + path + query string into a full URL.
  * - `assertSafeDomain` — reject a domain that could escape the guides dir.
  */
+
+/**
+ * Tokenize a JSON path into key/index segments in a single pass.
+ *
+ * - Dot segments split on `.` as before (unquoted legacy paths parse
+ *   identically to the old regex-rewrite tokenizer).
+ * - Numeric brackets `[3]` become index segments.
+ * - Quoted brackets `['@odata.nextLink']` / `["@odata.nextLink"]` become
+ *   ATOMIC key segments — the dot inside is part of the key name, not a
+ *   separator. The old rewrite turned the quoted segment into `.nextLink`
+ *   and silently missed the literal key.
+ *
+ * Syntax limits (documented, not handled): a quoted segment's content may
+ * not contain `]` or a quote character — either ends the capture. So
+ * `['a]b']` does NOT resolve (it accidentally resolved under the legacy
+ * regex; a miss is the acceptable outcome for a pathological key).
+ *
+ * Returns null for a malformed path (unterminated bracket, non-numeric
+ * unquoted bracket, `[-0]`) — the caller resolves that to `undefined`, never
+ * a silent wrong match. Returns [] for the root path (`"$"`, `"."`) —
+ * callers that need a data-bearing path must reject the empty tokenization
+ * themselves (a root `errorPath` would resolve the whole parsed body).
+ */
+export function tokenizeJsonPath(path: string): string[] | null {
+	const s = path.replace(/^\$\.?/, "");
+	const parts: string[] = [];
+	let buf = "";
+	let i = 0;
+	const flush = () => {
+		if (buf.length > 0) parts.push(buf);
+		buf = "";
+	};
+	while (i < s.length) {
+		const ch = s[i]!;
+		if (ch === ".") {
+			flush();
+			i++;
+		} else if (ch === "[") {
+			flush();
+			i++;
+			const q = s[i];
+			if (q === "'" || q === '"') {
+				// Quoted segment: atomic key, dots included. Content ends at the
+				// closing quote (which must be followed by `]`); `]` or a quote
+				// inside the content is a syntax limit → malformed.
+				i++;
+				let content = "";
+				while (i < s.length && s[i] !== q && s[i] !== "]") {
+					content += s[i];
+					i++;
+				}
+				if (i >= s.length || s[i] !== q || s[i + 1] !== "]") return null;
+				parts.push(content);
+				i += 2;
+			} else {
+				// Unquoted bracket: numeric index, optionally negative (`[3]`, `[-1]`).
+				let neg = false;
+				if (s[i] === "-") {
+					neg = true;
+					i++;
+				}
+				let digits = "";
+				while (i < s.length && s[i]! >= "0" && s[i]! <= "9") {
+					digits += s[i];
+					i++;
+				}
+				if (digits.length === 0 || s[i] !== "]") return null;
+				// Reject `[-0]`/`[-00]`: parseInt yields -0 and `-0 < 0` is false in
+				// JS, so the resolver's negative guard would never fire and `[-0]`
+				// would silently match element 0.
+				if (neg && /^0+$/.test(digits)) return null;
+				parts.push((neg ? "-" : "") + digits);
+				i++;
+			}
+		} else {
+			buf += ch;
+			i++;
+		}
+	}
+	flush();
+	return parts;
+}
 
 /** Extract `{token}` names from a templated path, in order, deduplicated. */
 export function extractPathTokens(path: string): string[] {

@@ -29,7 +29,12 @@ import {
 	redactSecretPathValues,
 	type FetchOptions,
 } from "./transport.js";
-import { fillPathTemplate, joinUrl, wireParamName } from "./path-template.js";
+import {
+	fillPathTemplate,
+	joinUrl,
+	tokenizeJsonPath,
+	wireParamName,
+} from "./path-template.js";
 import type { TransformFn } from "./local-helpers.js"; // type-only — no runtime import (flat dependency direction)
 import type {
 	ApiGuide,
@@ -345,86 +350,6 @@ export function normalizeDateParam(
 }
 
 /**
- * Tokenize a JSON path into key/index segments in a single pass.
- *
- * - Dot segments split on `.` as before (unquoted legacy paths parse
- *   identically to the old regex-rewrite tokenizer).
- * - Numeric brackets `[3]` become index segments.
- * - Quoted brackets `['@odata.nextLink']` / `["@odata.nextLink"]` become
- *   ATOMIC key segments — the dot inside is part of the key name, not a
- *   separator. The old rewrite turned the quoted segment into `.nextLink`
- *   and silently missed the literal key.
- *
- * Syntax limits (documented, not handled): a quoted segment's content may
- * not contain `]` or a quote character — either ends the capture. So
- * `['a]b']` does NOT resolve (it accidentally resolved under the legacy
- * regex; a miss is the acceptable outcome for a pathological key).
- *
- * Returns null for a malformed path (unterminated bracket, non-numeric
- * unquoted bracket, `[-0]`) — the caller resolves that to `undefined`, never
- * a silent wrong match.
- */
-function tokenizeJsonPath(path: string): string[] | null {
-	const s = path.replace(/^\$\.?/, "");
-	const parts: string[] = [];
-	let buf = "";
-	let i = 0;
-	const flush = () => {
-		if (buf.length > 0) parts.push(buf);
-		buf = "";
-	};
-	while (i < s.length) {
-		const ch = s[i]!;
-		if (ch === ".") {
-			flush();
-			i++;
-		} else if (ch === "[") {
-			flush();
-			i++;
-			const q = s[i];
-			if (q === "'" || q === '"') {
-				// Quoted segment: atomic key, dots included. Content ends at the
-				// closing quote (which must be followed by `]`); `]` or a quote
-				// inside the content is a syntax limit → malformed.
-				i++;
-				let content = "";
-				while (i < s.length && s[i] !== q && s[i] !== "]") {
-					content += s[i];
-					i++;
-				}
-				if (i >= s.length || s[i] !== q || s[i + 1] !== "]") return null;
-				parts.push(content);
-				i += 2;
-			} else {
-				// Unquoted bracket: numeric index, optionally negative (`[3]`, `[-1]`).
-				let neg = false;
-				if (s[i] === "-") {
-					neg = true;
-					i++;
-				}
-				let digits = "";
-				while (i < s.length && s[i]! >= "0" && s[i]! <= "9") {
-					digits += s[i];
-					i++;
-				}
-				if (digits.length === 0 || s[i] !== "]") return null;
-				// Reject `[-0]`/`[-00]`: parseInt yields -0 and `-0 < 0` is false in
-				// JS, so the resolver's negative guard would never fire and `[-0]`
-				// would silently match element 0.
-				if (neg && /^0+$/.test(digits)) return null;
-				parts.push((neg ? "-" : "") + digits);
-				i++;
-			}
-		} else {
-			buf += ch;
-			i++;
-		}
-	}
-	flush();
-	return parts;
-}
-
-/**
  * Resolve a simple dot-delimited JSON path against an object.
  * Supports `data.items`, `resultados[0].campo`, negative array indexes
  * addressing from the end (`results[-1].id`), `$.items` prefix, and
@@ -728,6 +653,44 @@ function checkResponseStatus(
 	);
 }
 
+/**
+ * Check a parsed 200 body for a declared present-only-on-error envelope
+ * element (`Operation.errorPath`). Resolution of anything other than
+ * `undefined` fails the call — presence is the signal, so `null`/""/`0`/
+ * `false` all fire (an empty XML element parses to "" and must not read as
+ * success); declared-absent is the API's not-an-error signal. Deliberately
+ * the inverse of hasMorePath's truthiness (where a RESOLVED falsy value is
+ * the stop signal).
+ *
+ * Generic capped stringify — no API-specific shape sniffing. Known secret
+ * values are scrubbed and the (already-redacted) request URL rides the
+ * error, same output-channel contract as checkResponseStatus.
+ *
+ * Placement (paginate loop): the very next statement after parseResponse —
+ * BEFORE totalCountPath extraction and both exhaustion breaks. An error page
+ * often misses itemsPath entirely (World Bank: error `[{"message":[…]}]` vs
+ * success `[meta, records]`), so a check after the breaks never fires — the
+ * walk exits with silent `items: []`.
+ */
+function checkErrorEnvelope(
+	data: unknown,
+	errorPath: string,
+	url: string | undefined,
+	secretValues?: string[],
+): void {
+	const resolved = resolveJsonPath(data, errorPath);
+	if (resolved === undefined) return;
+	const scrubbed = scrubSecretValues(JSON.stringify(resolved), secretValues);
+	throw new HelperError(
+		"response",
+		`API error envelope at ${errorPath} (HTTP status was 200): ${scrubbed.slice(0, 500)}`,
+		`nothing at ${errorPath} (declared-absent = not an error)`,
+		undefined,
+		undefined,
+		url,
+	);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // restGet
 // ═══════════════════════════════════════════════════════════════════
@@ -869,6 +832,12 @@ export async function restGet(
 
 	// 8. Parse response using the effective shape resolved above.
 	let data = parseResponse(result.body, shape);
+
+	// 8b. 200-with-error-envelope check (op.errorPath) — post-parse,
+	// pre-transform: the error envelope is the raw parsed shape.
+	if (operation.errorPath !== undefined) {
+		checkErrorEnvelope(data, operation.errorPath, url, opts?.secretValues);
+	}
 
 	// 9. Post-response transform (optional). When api-fetch supplied a
 	// `transformFn` (op.transform === true), apply it. A throwing transform is
@@ -1147,13 +1116,25 @@ export async function paginate(
 		// Check HTTP status before attempting to parse. Secret values scrubbed
 		// from the error excerpt (output-channel audit). The URL stored on
 		// the error object is redacted, computed upstream of checkResponseStatus.
-		checkResponseStatus(
-			{ ...result, url: redactSurfacedUrl(url, secretParamNames, pathValues) },
-			opts?.secretValues,
-		);
+		const redactedPageUrl = redactSurfacedUrl(url, secretParamNames, pathValues);
+		checkResponseStatus({ ...result, url: redactedPageUrl }, opts?.secretValues);
 
 		// Parse.
 		const data = parseResponse(result.body, shape);
+
+		// 200-with-error-envelope check (op.errorPath) — placement pin: the
+		// very next statement after parseResponse, BEFORE the totalCountPath
+		// extraction and both exhaustion breaks below. An error page often
+		// misses itemsPath entirely, so a check after the breaks never fires
+		// (the walk exits with silent items: []).
+		if (operation.errorPath !== undefined) {
+			checkErrorEnvelope(
+				data,
+				operation.errorPath,
+				redactedPageUrl,
+				opts?.secretValues,
+			);
+		}
 
 		// Extract the server's reported total from the first page that resolves
 		// one — before the empty-page break below, so a zero-result page that

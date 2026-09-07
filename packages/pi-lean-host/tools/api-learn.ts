@@ -306,6 +306,7 @@ const AUTHORING_MANUAL = [
 	`  \`dateParams\`  — normalize date QUERY params before sending: map name → iso8601 | yyyymmdd | yyyy-mm-dd (path tokens are documented via params.<token>.description; core dateParams does not reach path tokens)`,
 	`  \`helper\`      — true → call this domain's local helper.ts for this op`,
 	`  \`transform\`   — true → run the helper.ts \`transform\` export on the parsed response`,
+	`  \`errorPath\`   — JSON path to a present-only-on-error envelope element in a 200 body (e.g. \`OAI-PMH.error\`); anything other than \`undefined\` there (including null/""/0/false) fails the call as an error — declare a path that exists ONLY on error (Flickr \`message\`, World Bank \`0.message\`); root paths (\`$\`, \`.\`), malformed paths, and ops whose effective format is \`text\` are parse errors`,
 	`  \`params.<token>.description\` — docs-only description for a {token} path param (format, e.g. 'yyyy-mm-dd'); never sent as a query param, shown in api-guide`,
 	`  \`params.<name>.required\` — true → query param must be supplied (verify skips the op if missing; api-fetch errors before the request)`,
 	`  \`params.<name>.default\`  — value (any YAML scalar: string, number, boolean) used when the caller omits the param (verify runs the op with it; a \`required\`+\`default\` op is always verifiable without a verify.json sidecar; an array default additionally requires \`listStyle\` and must be non-empty)`,

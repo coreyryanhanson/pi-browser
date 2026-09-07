@@ -12,7 +12,12 @@ import { parse as yamlParse } from "yaml";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Guide } from "./guide-loader.js";
-import { extractPathTokens, slug, wireParamName } from "./path-template.js";
+import {
+	extractPathTokens,
+	slug,
+	tokenizeJsonPath,
+	wireParamName,
+} from "./path-template.js";
 import {
 	GATHER_ALL_MAX_FALLBACK,
 	GUIDE_SCHEMA_VERSION,
@@ -1268,6 +1273,7 @@ function validateOperation(
 	index: number,
 	file: string | undefined,
 	topPagination: PaginationConfig | undefined,
+	guideResponseShape: ResponseShape,
 ): Operation | ParseApiGuideResult {
 	const fieldPath = (leaf: string) => `operations[${index}].${leaf}`;
 
@@ -1702,6 +1708,62 @@ function validateOperation(
 		parseOverride = pr;
 	}
 
+	// errorPath — present-only-on-error envelope path. Guards (all parse-time,
+	// fail-loud in front of the author):
+	//  - non-empty string (wrong type → ParseError)
+	//  - tokenizeable — a malformed path would resolve `undefined` at runtime,
+	//    i.e. declared-absent → success: the exact confidently-wrong failure
+	//    mode this field exists to kill. Parse is the only code that runs
+	//    exactly once, in front of the author who can fix it.
+	//  - non-empty tokenization — the root path ("$", ".") tokenizes to [] and
+	//    would resolve the entire parsed body, which is always defined
+	//    post-parseResponse — every call would fail.
+	//  - effective shape not text — parseResponse returns the raw body string
+	//    for text ops and resolveJsonPath against a string always resolves
+	//    undefined (declared-then-dead). Covers an op-level parse override AND
+	//    an op without one under a text guide-level responseShape.
+	const errorPathRaw = o["errorPath"];
+	let errorPath: string | undefined;
+	if (errorPathRaw !== undefined) {
+		if (typeof errorPathRaw !== "string" || errorPathRaw === "") {
+			return fail(
+				file,
+				fieldPath("errorPath"),
+				"a non-empty string JSON path",
+				describeFound(errorPathRaw),
+			);
+		}
+		const tokens = tokenizeJsonPath(errorPathRaw);
+		if (tokens === null) {
+			return fail(
+				file,
+				fieldPath("errorPath"),
+				"a tokenizeable JSON path",
+				`"${errorPathRaw}" is malformed (unterminated or non-numeric bracket)`,
+				{
+					fix: 'Fix the path syntax — e.g. "OAI-PMH.error" or "result[0].message".',
+				},
+			);
+		}
+		if (tokens.length === 0) {
+			return fail(
+				file,
+				fieldPath("errorPath"),
+				"a JSON path to an error element (not the document root)",
+				`"${errorPathRaw}" resolves the entire parsed body — every call would fail`,
+			);
+		}
+		if ((parseOverride ?? guideResponseShape).format === "text") {
+			return fail(
+				file,
+				fieldPath("errorPath"),
+				"an op whose effective response shape is not format: text",
+				"errorPath can never fire on a text op — parseResponse yields the raw body string, not a resolvable shape",
+			);
+		}
+		errorPath = errorPathRaw;
+	}
+
 	// pagination (op-level override)
 	const opPaginationRaw = o["pagination"];
 	let opPagination: PaginationConfig | undefined;
@@ -1825,6 +1887,7 @@ function validateOperation(
 		...(dateParams === undefined ? {} : { dateParams }),
 		...(requiresAnyOf === undefined ? {} : { requiresAnyOf }),
 		...(parseOverride ? { parse: parseOverride } : {}),
+		...(errorPath === undefined ? {} : { errorPath }),
 		...(opPagination ? { pagination: opPagination } : {}),
 		...(opGatherAllMax === undefined ? {} : { gatherAllMax: opGatherAllMax }),
 	};
@@ -2120,7 +2183,7 @@ export function parseApiGuide(
 	for (let i = 0; i < opsRaw.length; i++) {
 		const opRaw = opsRaw[i];
 		if (opRaw === undefined) continue;
-		const opRes = validateOperation(opRaw, i, file, pagination);
+		const opRes = validateOperation(opRaw, i, file, pagination, responseShape);
 		if (!("name" in opRes)) return opRes as ParseApiGuideResult;
 		operations.push(opRes);
 	}

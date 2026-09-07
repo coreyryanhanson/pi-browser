@@ -16,6 +16,7 @@ operations:
     via: paginate
     path: /oai/repository
     accept: xml
+    errorPath: OAI-PMH.error
     pagination:
       style: resumptionToken
       itemsPath: OAI-PMH.ListRecords.record
@@ -30,9 +31,10 @@ operations:
 ---
 # DNB OAI-PMH (synthetic axis guide) — resumptionToken + XML
 
-Synthetic coverage fixture for the `resumptionToken` pagination style and
-`xml-parsing`, plus `exec-paginate` and `transport`. There is **no live
-endpoint** — exercised only against mocked transport.
+Synthetic coverage fixture for the `resumptionToken` pagination style,
+`xml-parsing`, the `errorPath` error-envelope axis, `exec-paginate`, and
+`transport`. There is **no live endpoint** — exercised only against mocked
+transport.
 
 ## Operations
 
@@ -40,3 +42,8 @@ endpoint** — exercised only against mocked transport.
   opaque `resumptionToken` from each page into the next request; a terminal
   token (no `#text`) stops pagination. `totalCountPath` surfaces
   `@_completeListSize` as `serverTotal`.
+- **`errorPath: OAI-PMH.error`** — an OAI-PMH error page
+  (`<OAI-PMH><error code="noRecordsMatch">…</error></OAI-PMH>`, no
+  `ListRecords` at all) fails loudly via the 200-envelope check instead of
+  exiting the walk with silent `items: []`; a clean page has no `<error>`
+  element (declared-absent = not an error).

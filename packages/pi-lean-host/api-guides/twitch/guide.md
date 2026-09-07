@@ -31,9 +31,11 @@ operations:
     requiresAnyOf: [id, login]
     params:
       id:
-        description: User ID (up to 100, repeatable).
+        description: User ID — array of up to 100 (repeatable wire form).
+        listStyle: repeat
       login:
-        description: Login name (up to 100, repeatable).
+        description: Login name — array of up to 100 (repeatable wire form).
+        listStyle: repeat
 ---
 # Twitch Helix (synthetic axis guide) — oauth2 client_credentials
 
@@ -54,7 +56,9 @@ re-mints on expiry instead of refreshing).
 
 ## Operations
 
-- **`users`** (`restGet`) — `/helix/users` with `requiresAnyOf: [id, login]`.
+- **`users`** (`restGet`) — `/helix/users` with `requiresAnyOf: [id, login]`;
+  `id`/`login` carry `listStyle: repeat` (array → repeated wire pairs, up to
+  100 per Twitch docs).
   When `client_id`/`client_secret` are provisioned, the captured transport
   headers must include both `Authorization: Bearer <token>` and `Client-Id`.
 

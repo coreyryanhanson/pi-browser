@@ -29,12 +29,14 @@ import {
 	redactSecretPathValues,
 	type FetchOptions,
 } from "./transport.js";
-import { fillPathTemplate, joinUrl } from "./path-template.js";
+import { fillPathTemplate, joinUrl, wireParamName } from "./path-template.js";
 import type { TransformFn } from "./local-helpers.js"; // type-only — no runtime import (flat dependency direction)
 import type {
 	ApiGuide,
 	DateParamFormat,
+	ListStyle,
 	Operation,
+	QueryParamSpec,
 	ResponseShape,
 } from "./api-guide-types.js";
 
@@ -73,8 +75,10 @@ export interface RestGetResult {
 	headers: Record<string, string>;
 	/** The full resolved URL that was fetched. */
 	url: string;
-	/** Effective query params actually sent (post-defaults, post-validation). */
-	params: Record<string, string>;
+	/** Effective query params actually sent (post-defaults, post-validation).
+	 *  A `listStyle` param's multi-value array surfaces as a real `string[]`
+	 *  keyed by the declared param name (the URL shows the true wire form). */
+	params: Record<string, string | string[]>;
 	/** Set when a post-response transform throws (raw `data` preserved). */
 	transformWarning?: string;
 }
@@ -99,8 +103,10 @@ export interface PaginateResult {
 	urls: string[];
 	/** Number of pages fetched (= urls.length). */
 	pages: number;
-	/** Effective query params actually sent (post-defaults, post-validation). */
-	params: Record<string, string>;
+	/** Effective query params actually sent (post-defaults, post-validation).
+	 *  A `listStyle` param's multi-value array surfaces as a real `string[]`
+	 *  keyed by the declared param name (the URL shows the true wire form). */
+	params: Record<string, string | string[]>;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -135,8 +141,8 @@ function buildQueryParams(
 	operation: Operation,
 	params: Record<string, unknown>,
 	secretParamNames?: Set<string>,
-): Record<string, string> {
-	const query: Record<string, string> = {};
+): Record<string, string | string[]> {
+	const query: Record<string, string | string[]> = {};
 	const pathParamSet = new Set(operation.pathParams);
 
 	for (const [key, spec] of Object.entries(operation.params)) {
@@ -160,15 +166,26 @@ function buildQueryParams(
 		}
 
 		if (val !== undefined) {
-			// Date param normalization — convert to target format before serialization.
+			// Date param normalization — convert to target format before
+			// serialization. An array here is a loud error BEFORE normalization
+			// (normalizeDateParam operates on scalars; an array would be
+			// silently mangled on the wire as String(val) garbage).
 			if (operation.dateParams && key in operation.dateParams) {
+				if (Array.isArray(val)) {
+					throw new HelperError(
+						`params.${key}`,
+						`Array value for date param "${key}" — date params are single-valued`,
+						"a scalar date value",
+						"an array",
+						`Pass one date for params.${key} (remove it from dateParams if the API truly accepts multi-value dates — then declare listStyle:).`,
+					);
+				}
 				val = normalizeDateParam(val, operation.dateParams[key]!);
 			}
-			// Nested objects/arrays serialize as JSON so structured query
-			// params (e.g. BOE's ES query_string DSL) reach the wire as
-			// JSON, not `[object Object]`. Scalars stay as String(val).
-			query[key] =
-				typeof val === "object" && val !== null ? JSON.stringify(val) : String(val);
+			// Scalars as today; nested objects as JSON (BOE's query_string DSL);
+			// arrays only with a declared listStyle (multi-value). Shared with
+			// the passthrough loop below — one validator, both sites.
+			query[key] = serializeParamValue(key, val, spec.listStyle);
 		}
 	}
 
@@ -208,14 +225,103 @@ function buildQueryParams(
 			if (val === undefined) continue;
 			let v: unknown = val;
 			if (operation.dateParams && key in operation.dateParams) {
+				if (Array.isArray(v)) {
+					throw new HelperError(
+						`params.${key}`,
+						`Array value for date param "${key}" — date params are single-valued`,
+						"a scalar date value",
+						"an array",
+					);
+				}
 				v = normalizeDateParam(v, operation.dateParams[key]!);
 			}
-			query[key] =
-				typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+			// Passthrough keys have no schema and can't declare a listStyle —
+			// passing `undefined` makes any array a loud error. Escape valve:
+			// declare the param (with a style) instead of passing it undeclared.
+			query[key] = serializeParamValue(key, v, undefined);
 		}
 	}
 
 	return query;
+}
+
+/**
+ * Serialize one query-param value — the shared array-rules validator used by
+ * BOTH serialization loops (declared params + passthrough) in
+ * `buildQueryParams`. The parser's array-`default` validation mirrors these
+ * rules at authoring time.
+ *
+ * - Scalars: exactly as today (`String(val)`).
+ * - Nested objects: JSON (BOE's `query_string` DSL must not regress).
+ * - Arrays: multi-value, only on a `listStyle`-declared param. Empty arrays
+ *   and arrays of non-scalars are loud errors (an empty array would silently
+ *   drop a param that already passed the `required`/`requiresAnyOf` guards;
+ *   `[object Object]` on the wire is the silent-wrong-wire class this
+ *   exists to kill). For `comma`, an element containing a `,` is also loud:
+ *   the joined wire form is indistinguishable from a longer list.
+ * - An array without a `listStyle` (including every passthrough array) is a
+ *   loud error naming the param and the fix.
+ *
+ * Returns the stored value: a scalar string, or a real `string[]` for
+ * multi-value (expanded to wire pairs in `buildUrl`, the one
+ * Record→query-string boundary).
+ */
+function serializeParamValue(
+	key: string,
+	val: unknown,
+	listStyle: ListStyle | undefined,
+): string | string[] {
+	if (Array.isArray(val)) {
+		if (listStyle === undefined) {
+			throw new HelperError(
+				`params.${key}`,
+				`Array value for query param "${key}" but the param declares no listStyle`,
+				"a scalar, or an array on a listStyle-declared param",
+				"an array",
+				`Declare listStyle: comma | repeat | bracket on params.${key}, or pass a scalar`,
+			);
+		}
+		if (val.length === 0) {
+			throw new HelperError(
+				`params.${key}`,
+				`Empty array for multi-value query param "${key}" — the param would be silently dropped from the request`,
+				"a non-empty array of scalar (string | number | boolean) elements",
+				"[]",
+			);
+		}
+		const out: string[] = [];
+		for (const el of val) {
+			if (
+				el === null ||
+				(typeof el !== "string" &&
+					typeof el !== "number" &&
+					typeof el !== "boolean")
+			) {
+				throw new HelperError(
+					`params.${key}`,
+					`Non-scalar element in multi-value query param "${key}"`,
+					"an array of scalar (string | number | boolean) elements",
+					typeof el === "object" && el !== null ? "an object" : String(el),
+				);
+			}
+			if (listStyle === "comma" && typeof el === "string" && el.includes(",")) {
+				throw new HelperError(
+					`params.${key}`,
+					`Element of "${key}" contains a comma — listStyle: comma joins with ',' and the joined wire form would be indistinguishable from a longer list`,
+					"comma-free elements",
+					`"${el}"`,
+				);
+			}
+			out.push(String(el));
+		}
+		return out;
+	}
+	// Nested objects/arrays-of-last-resort serialize as JSON so structured
+	// query params (e.g. BOE's ES query_string DSL) reach the wire as JSON,
+	// not `[object Object]`. Scalars stay as String(val).
+	return typeof val === "object" && val !== null
+		? JSON.stringify(val)
+		: String(val);
 }
 
 /**
@@ -419,9 +525,33 @@ export function parseResponse(body: string, shape: ResponseShape): unknown {
 function buildUrl(
 	apiHost: string,
 	resolvedPath: string,
-	query: Record<string, string>,
+	query: Record<string, string | string[]>,
+	paramSpecs?: Record<string, QueryParamSpec>,
 ): string {
-	return joinUrl(apiHost, resolvedPath, new URLSearchParams(query).toString());
+	// The one Record→query-string boundary. Scalars pass through as one
+	// pair; a listStyle param's array expands here — `comma` joins (one
+	// pair; elements were validated comma-free at build time), `repeat`
+	// fans out one pair per element under the declared name, `bracket`
+	// fans out with the wire key dressed +"[]". URLSearchParams encodes the
+	// brackets (`id%5B%5D=`) and preserves insertion order (secret params
+	// ride below the agent pairs — merge-order contract).
+	const pairs: [string, string][] = [];
+	for (const [key, val] of Object.entries(query)) {
+		if (Array.isArray(val)) {
+			const style = paramSpecs?.[key]?.listStyle;
+			if (style === "comma") {
+				pairs.push([key, val.join(",")]);
+			} else if (style === "bracket") {
+				const wireKey = `${key}[]`;
+				for (const el of val) pairs.push([wireKey, el]);
+			} else {
+				for (const el of val) pairs.push([key, el]); // repeat
+			}
+		} else {
+			pairs.push([key, val]);
+		}
+	}
+	return joinUrl(apiHost, resolvedPath, new URLSearchParams(pairs).toString());
 }
 
 /**
@@ -696,10 +826,12 @@ export async function restGet(
 	// redactSecretParams alone can't touch them.
 	const secretParams = opts?.secretQueryParams ?? {};
 	const hasQuerySecret = Object.keys(secretParams).length > 0;
-	const fetchUrlRaw = buildUrl(apiHost, resolvedPath, {
-		...query,
-		...secretParams,
-	});
+	const fetchUrlRaw = buildUrl(
+		apiHost,
+		resolvedPath,
+		{ ...query, ...secretParams },
+		operation.params,
+	);
 	const url = redactSurfacedUrl(fetchUrlRaw, secretParamNames, pathValues);
 
 	// 5. Build Accept header — json/xml shorthands expand; everything
@@ -925,8 +1057,12 @@ export async function paginate(
 	const urls: string[] = [];
 
 	while (true) {
-		// Build per-page params.
-		const pageParams: Record<string, string> = {};
+		// Build per-page params. Keyed supersession: pagination/tokenBag
+		// writes below REPLACE same-named base values via plain overwrite —
+		// only genuinely multi-value (listStyle) keys hold arrays, and the
+		// parse-time collision guard guarantees those never collide with a
+		// pagination/tokenBag wire name, so every write here is a scalar.
+		const pageParams: Record<string, string | string[]> = {};
 		for (const [key, val] of Object.entries(effectiveParams)) {
 			pageParams[key] = val;
 		}
@@ -956,10 +1092,12 @@ export async function paginate(
 				: new URL(nextUrl, apiHost).toString();
 		} else {
 			// Append secret query params below the agent-supplied page params.
-			url = buildUrl(apiHost, resolvedPath, {
-				...pageParams,
-				...secretParams,
-			});
+			url = buildUrl(
+				apiHost,
+				resolvedPath,
+				{ ...pageParams, ...secretParams },
+				operation.params,
+			);
 		}
 
 		// Every surfaced URL (incl. a server-supplied nextUrl that may
@@ -1196,16 +1334,10 @@ function advancePagination(
 		for (const key of cfg.continuationParams ?? []) {
 			const v = resolveJsonPath(data, key);
 			if (v === undefined || v === null) continue;
-			// Wire param = last dot segment, with any quoted-bracket dress
-			// stripped UNCONDITIONALLY (before the dot check): a quoted
-			// non-dotted key like "['next']" (no dot → pop is a no-op) would
-			// otherwise wire the bracketed junk as the param name.
-			const param = key
-				.split(".")
-				.pop()!
-				.replace(/^\[['"]?/, "")
-				.replace(/['"]?\]$/, "");
-			collected[param] = String(v);
+			// Wire param = wireParamName (last dot segment, bracket dress
+			// stripped — shared with the parser's listStyle collision guard so
+			// the derivation exists once).
+			collected[wireParamName(key)] = String(v);
 		}
 		return Object.keys(collected).length > 0 ? { tokenBag: collected } : null;
 	}

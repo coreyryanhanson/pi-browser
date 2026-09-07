@@ -186,6 +186,8 @@ responseShape:
 #     params:
 #       id:
 #         description: <what id selects>
+#         # listStyle: comma  # array values serialize as comma | repeat | bracket — omit for single-valued
+#     # unknown params keys are a parse error (typo tripwire)
 ---
 
 # Optional agent-instruction prose goes AFTER the closing --- and is surfaced
@@ -306,7 +308,8 @@ const AUTHORING_MANUAL = [
 	`  \`transform\`   — true → run the helper.ts \`transform\` export on the parsed response`,
 	`  \`params.<token>.description\` — docs-only description for a {token} path param (format, e.g. 'yyyy-mm-dd'); never sent as a query param, shown in api-guide`,
 	`  \`params.<name>.required\` — true → query param must be supplied (verify skips the op if missing; api-fetch errors before the request)`,
-	`  \`params.<name>.default\`  — value (any YAML scalar: string, number, boolean) used when the caller omits the param (verify runs the op with it; a \`required\`+\`default\` op is always verifiable without a verify.json sidecar)`,
+	`  \`params.<name>.default\`  — value (any YAML scalar: string, number, boolean) used when the caller omits the param (verify runs the op with it; a \`required\`+\`default\` op is always verifiable without a verify.json sidecar; an array default additionally requires \`listStyle\` and must be non-empty)`,
+	`  \`params.<name>.listStyle\` — comma | repeat | bracket — how an array value serializes on the query string (comma → id=a,b; repeat → id=a&id=b; bracket → id[]=a); scalars ignore the field`,
 	`  \`requiresAnyOf\` — [param, ...] — at least one of these params must be supplied (one group per op). Use it when the API identifies a resource by exactly one of several interchangeable params and rejects them together (id XOR symbol XOR slug — the "exclusive peers" 400). Members may not be \`required: true\` NOR carry a \`default\` (both parser-enforced) — a default would always fire alongside a caller-supplied sibling and cause the conflict. Use \`required: true\` for a single-param constraint; \`requiresAnyOf\` is for two or more interchangeable params`,
 	`  \`passthrough\` — true → forward undeclared caller params onto the query string`,
 	`  \`parse\`       — op-level responseShape override (format/charset) for this operation`,

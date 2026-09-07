@@ -203,7 +203,7 @@ describe("emitDraft (marker → style guess)", () => {
 		expect(draft).toContain("# via: paginate");
 		expect(draft).toContain("#   itemsPath: $");
 		// The active block stays restGet — the paginate arm is commented.
-		expect(draft).not.toMatch(/^    pagination:/m);
+		expect(draft).not.toMatch(/^ {4}pagination:/m);
 	});
 });
 
@@ -1523,5 +1523,26 @@ describe("api-probe headerPrefixes without secretRefs", () => {
 			setSecretsDir(prevDir);
 			rmSync(tmp, { recursive: true, force: true });
 		}
+	});
+});
+
+// listStyle era: probe has no guide schema to declare listStyle
+// against, so non-scalar params are a loud error — never the silent
+// String(v) wire form (String(["a","b"]) → "a,b" was accidentally
+// comma-correct but misdescribes repeat/bracket APIs). The throw happens in
+// buildUrl BEFORE any fetch, so no network is touched.
+describe("probe loud non-scalar param rejection", () => {
+	it("an array param value rejects with a prescriptive error", async () => {
+		await expect(
+			probe("https://probe-never-reached.test", "/packs", { ids: ["a", "b"] }),
+		).rejects.toThrow(/pre-join list values as a string/);
+	});
+
+	it("an object param value rejects with the JSON.stringify escape valve", async () => {
+		await expect(
+			probe("https://probe-never-reached.test", "/search", {
+				query_string: { match: { title: "x" } },
+			}),
+		).rejects.toThrow(/JSON.stringify DSL params/);
 	});
 });

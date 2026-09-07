@@ -192,6 +192,32 @@
 
 ### Changed
 
+- **`pi-lean-host` — multi-value query params (`listStyle`) + loud array
+  rules** — `QueryParamSpec` gains `listStyle?: "comma" | "repeat" |
+  "bracket"` (additive; no `schemaVersion` bump): an **array** value on a
+  `listStyle` param serializes per the style (`comma` → `id=a,b`, `repeat`
+  → `id=a&id=b`, `bracket` → `id[]=a&id[]=b`); scalars ignore the field
+  entirely. This replaces the old silent `JSON.stringify` of array values
+  ("labels=[\"a\",\"b\"]" on the wire — zero matches, no error). Three
+  breaking surfaces, all inside the pre-release window:
+  (1) an **array on a non-`listStyle` param** (or a passthrough or date
+  param) is now a loud `HelperError` — pass a scalar or declare a style;
+  `helper.ts` array **returns** follow the same rule (declare `listStyle:`
+  or return scalars); (2) **`api-probe` rejects non-scalar params loudly** —
+  arrays that previously hit the wire as `String(v)` = `a,b` (accidentally
+  comma-correct) now error; pre-join lists as strings, `JSON.stringify`
+  DSL params; (3) **unknown param-spec keys are a parse error** — a typo'd
+  `listStyl:`/`requried:` is no longer silently dropped; user-authored
+  guides in `~/.pi/agent/pi-lean-host/api-guides/` with stray keys in a
+  `params:` block must be cleaned up. Empty arrays, non-scalar elements,
+  comma-bearing elements on `comma`, a `listStyle` param also named in
+  `dateParams` (mutually exclusive — date params are single-valued), and
+  a `listStyle` param colliding with effective pagination/tokenBag wire
+  names are all rejected (parse time for defaults and collisions, runtime
+  for call-time values). `result.params`
+  surfaces multi-value params as a real `string[]` keyed by the declared
+  name; `api-guide` renders `(listStyle: …)` per param.
+
 - **`pi-lean-host` — executor signature: `restGet`/`paginate` options
   object** — the two public executor functions collapse their optional
   positional tail into the existing options parameter:

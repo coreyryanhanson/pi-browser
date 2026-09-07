@@ -22,6 +22,7 @@ import {
 	HelperError,
 	resolveJsonPath,
 	normalizeDateParam,
+	type RestGetResult,
 } from "../core/helpers.js";
 import { ssrfGuard } from "../core/ssrf-guard.js";
 import { fetchUrl } from "../core/transport.js";
@@ -832,16 +833,22 @@ describe("restGet", () => {
 		expect(result.params["query"]).toBe(JSON.stringify(nested));
 	});
 
-	it("serializes an array query param as JSON", async () => {
+	// listStyle contract: an array on a non-listStyle param is a loud
+	// HelperError, never the silent JSON.stringify wire form
+	// ("[\"a\",\"b\"]" matched nothing).
+	it("array on a non-listStyle param is a loud HelperError", async () => {
 		const guide = makeGuide({ apiHost: ctx.serverUrl });
 		const op = makeOp({
 			path: "/api/items-query",
 			params: { tags: {} },
 		});
 
-		const result = await restGet(ctx.serverUrl, op, { tags: ["a", "b"] }, guide);
-		expect(result.params["tags"]).toBe('["a","b"]');
-		expect(result.url).not.toContain("[object Object]");
+		await expect(
+			restGet(ctx.serverUrl, op, { tags: ["a", "b"] }, guide),
+		).rejects.toThrow(HelperError);
+		await expect(
+			restGet(ctx.serverUrl, op, { tags: ["a", "b"] }, guide),
+		).rejects.toThrow(/declares no listStyle/);
 	});
 
 	// `passthrough` — open param surface (Infogami /query.json flat form,
@@ -1965,5 +1972,191 @@ describe("fetchUrl — guardRedirects (M3)", () => {
 		// transient, so fetchUrl must not retry).
 		const after = ctx.requestCounts.get("/redirect-to-metadata") ?? 0;
 		expect(after - before).toBe(1);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// listStyle — multi-value query params (serializer widening)
+// ═══════════════════════════════════════════════════════════════════
+
+describe("listStyle — multi-value query params", () => {
+	const SKIP = { skipSsrfGuard: true } as const;
+	let ctx: TestContext;
+
+	beforeAll(async () => {
+		ctx = await createTestServer();
+	});
+
+	afterAll(async () => {
+		await ctx.stop();
+	});
+
+	async function fetchUrlFor(
+		paramSpecs: Operation["params"],
+		params: Record<string, unknown>,
+		opOverrides?: Partial<Operation>,
+	): Promise<RestGetResult> {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			path: "/api/items-query",
+			params: paramSpecs,
+			...opOverrides,
+		});
+		return restGet(ctx.serverUrl, op, params, guide);
+	}
+
+	it("comma joins the array into one pair", async () => {
+		const r = await fetchUrlFor(
+			{ id: { listStyle: "comma" } },
+			{ id: ["a", "b"] },
+		);
+		expect(r.url).toContain("id=a%2Cb");
+		expect(r.url).not.toContain("id=a&id=b");
+		expect(r.params["id"]).toEqual(["a", "b"]);
+	});
+
+	it("repeat fans out one pair per element under the declared name", async () => {
+		const r = await fetchUrlFor(
+			{ id: { listStyle: "repeat" } },
+			{ id: ["a", "b"] },
+		);
+		expect(r.url).toContain("id=a&id=b");
+		expect(r.params["id"]).toEqual(["a", "b"]);
+	});
+
+	it("bracket fans out with the [] wire key (percent-encoded by URLSearchParams)", async () => {
+		const r = await fetchUrlFor(
+			{ id: { listStyle: "bracket" } },
+			{ id: ["a", "b"] },
+		);
+		expect(r.url).toContain("id%5B%5D=a&id%5B%5D=b");
+		// The declared name (not id[]) keys the surfaced params.
+		expect(r.params["id"]).toEqual(["a", "b"]);
+		expect(r.params["id[]"]).toBeUndefined();
+	});
+
+	it("a scalar ignores listStyle (today's wire bytes unchanged)", async () => {
+		const r = await fetchUrlFor({ id: { listStyle: "comma" } }, { id: "solo" });
+		expect(r.url).toContain("id=solo");
+		expect(r.url).not.toContain("%2C");
+		expect(r.params["id"]).toBe("solo");
+	});
+
+	it("an array on a dateParams param is a loud HelperError", async () => {
+		await expect(
+			fetchUrlFor(
+				{
+					since: { listStyle: "comma" },
+				},
+				{ since: ["2026-01-01", "2026-02-01"] },
+				{ dateParams: { since: "yyyy-mm-dd" } },
+			),
+		).rejects.toThrow(/date param "since"/);
+	});
+
+	it("a comma-bearing element on a comma-style param is a loud HelperError", async () => {
+		// ["a,b", "c"] → "a,b,c" is indistinguishable from a 3-element list —
+		// the wire genuinely cannot express the input.
+		await expect(
+			fetchUrlFor({ id: { listStyle: "comma" } }, { id: ["a,b", "c"] }),
+		).rejects.toThrow(/contains a comma/);
+	});
+
+	it("an empty array is a loud HelperError", async () => {
+		await expect(
+			fetchUrlFor({ id: { listStyle: "repeat" } }, { id: [] }),
+		).rejects.toThrow(/empty array/i);
+	});
+
+	it("a non-scalar array element is a loud HelperError", async () => {
+		await expect(
+			fetchUrlFor(
+				{ id: { listStyle: "repeat" } },
+				{ id: ["a", { nested: true }] },
+			),
+		).rejects.toThrow(/non-scalar element/i);
+	});
+
+	it("passthrough arrays are a loud HelperError (no schema to declare a style)", async () => {
+		await expect(
+			fetchUrlFor(
+				{ type: { required: true } },
+				{ type: "x", extra: ["a", "b"] },
+				{ passthrough: true },
+			),
+		).rejects.toThrow(/listStyle/);
+	});
+
+	it("passthrough scalars still serialize (and objects as JSON)", async () => {
+		const r = await fetchUrlFor(
+			{ type: { required: true } },
+			{ type: "x", extra: "plain", cfg: { a: 1 } },
+			{ passthrough: true },
+		);
+		expect(r.url).toContain("extra=plain");
+		expect(r.url).toContain("cfg=%7B%22a%22%3A1%7D");
+	});
+
+	it("declared page default + pageParam → one page=N per page, never a duplicate", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			via: "paginate",
+			path: "/api/paginate/page",
+			params: {
+				page: { default: 0 },
+				tags: { listStyle: "repeat" },
+			},
+			pagination: {
+				style: "page",
+				pageParam: "page",
+				pageSizeParam: "size",
+				pageSize: 5,
+				itemsPath: "results",
+			},
+		});
+
+		const result = await paginate(
+			ctx.serverUrl,
+			op,
+			{ tags: ["a", "b"] },
+			guide,
+			{ gatherAll: true, ...SKIP },
+		);
+		expect(result.pages).toBeGreaterThan(1);
+		for (const url of result.urls) {
+			// The listStyle pair rides along; the page pair is never duplicated.
+			expect(url).toContain("tags=a&tags=b");
+			expect(url.match(/page=/g)).toHaveLength(1);
+		}
+		// Multi-value params surface as a real array keyed by the declared name.
+		expect(result.params["tags"]).toEqual(["a", "b"]);
+	});
+
+	it("tokenBag continuation keys replace same-named base params", async () => {
+		const guide = makeGuide({ apiHost: ctx.serverUrl });
+		const op = makeOp({
+			via: "paginate",
+			path: "/api/paginate/token-bag",
+			params: {
+				// Scalar collision with a tokenBag wire name is legal — the bag
+				// overwrites the base value per page (the parse-time collision
+				// guard only rejects listStyle params here).
+				rccontinue: { default: "stale" },
+			},
+			pagination: {
+				style: "tokenBag",
+				continuationParams: ["continue.continue", "continue.rccontinue"],
+				itemsPath: "query.recentchanges",
+			},
+		});
+
+		const result = await paginate(ctx.serverUrl, op, {}, guide, {
+			gatherAll: true,
+			...SKIP,
+		});
+		// Page 1 carries the base default; page 2 the bag's value — never both.
+		expect(result.urls[0]).toContain("rccontinue=stale");
+		expect(result.urls[1]).toContain("rccontinue=done");
+		expect(result.urls[1]?.match(/rccontinue=/g)).toHaveLength(1);
 	});
 });

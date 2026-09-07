@@ -27,6 +27,7 @@ import {
 	stampFrontmatterField,
 	PAGINATION_ALLOWLISTS,
 	AUTH_ALLOWLISTS,
+	PARAM_SPEC_KEYS,
 } from "../core/parse-api-guide.js";
 import { slug } from "../core/path-template.js";
 import {
@@ -1925,6 +1926,27 @@ body
 		expect(err.expected).toContain("YAML mapping");
 	});
 
+	it("rejects listStyle on a param also named in dateParams (mutually exclusive)", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+operations:
+  - name: getThings
+    via: restGet
+    path: /things
+    params:
+      since:
+        listStyle: comma
+    dateParams:
+      since: iso8601
+---
+body
+`;
+		const err = expectErr(raw);
+		expect(err.field).toBe("operations[0].dateParams.since");
+		expect(err.expected).toContain("listStyle can never apply");
+	});
+
 	it("accepts operation without dateParams", () => {
 		const raw = `---
 domains: [example.com]
@@ -2405,6 +2427,19 @@ describe("parseApiGuide — auth field allowlist tripwire", () => {
 	});
 });
 
+describe("parseApiGuide — param-spec key allowlist tripwire", () => {
+	// Two-direction tripwire: the allowlist must EQUAL the keys the param-spec
+	// reader assigns. The reverse direction is load-bearing — an allowlisted
+	// key with no s["<key>"] handling block is accepted then silently dropped,
+	// re-creating the silent-no-op bug this allowlist kills (same pattern as
+	// the pagination/auth allowlist tripwires).
+	it("allowlist exactly matches the keys the param-spec reader assigns", () => {
+		expect([...PARAM_SPEC_KEYS].sort()).toEqual(
+			["default", "description", "listStyle", "required"].sort(),
+		);
+	});
+});
+
 describe("parseApiGuide — secretPathRefs", () => {
 	function guideWithOps(authYaml: string, opsYaml: string) {
 		return `---
@@ -2604,5 +2639,297 @@ body
 		);
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.error.field).toBe("auth.secretPathRef");
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// listStyle — multi-value query params (schema field + parser rules)
+// ═══════════════════════════════════════════════════════════════════
+
+function listStyleGuide(opYaml: string, topPagination = ""): string {
+	return `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+${topPagination}
+operations:
+${opYaml}
+---
+Prose body.
+`;
+}
+
+const LISTSTYLE_OP = `  - name: search
+    via: restGet
+    path: /search
+    params:
+      labels:
+        listStyle: comma
+`;
+
+describe("parseApiGuide — listStyle", () => {
+	it("accepts a listStyle param and parses it onto the spec", () => {
+		const guide = expectOk(listStyleGuide(LISTSTYLE_OP), {
+			filename: "example.com",
+		});
+		expect(guide.operations[0]!.params["labels"]!.listStyle).toBe("comma");
+	});
+
+	it("accepts all three enum values", () => {
+		for (const style of ["comma", "repeat", "bracket"] as const) {
+			const guide = expectOk(
+				listStyleGuide(LISTSTYLE_OP.replace("comma", style)),
+				{ filename: "example.com" },
+			);
+			expect(guide.operations[0]!.params["labels"]!.listStyle).toBe(style);
+		}
+	});
+
+	it("unknown listStyle value → ParseError naming the valid values", () => {
+		const err = expectErr(listStyleGuide(LISTSTYLE_OP.replace("comma", "csv")), {
+			filename: "example.com",
+		});
+		expect(err.field).toBe("operations[0].params.labels.listStyle");
+		expect(err.expected).toContain("comma | repeat | bracket");
+	});
+
+	it("listStyle on a path param → ParseError (docs-only routing)", () => {
+		const err = expectErr(
+			listStyleGuide(`  - name: getThing
+    via: restGet
+    path: /things/{id}
+    params:
+      id:
+        listStyle: comma
+`),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.id");
+		expect(err.expected).toContain("docs-only");
+	});
+
+	it("bracket on a param name already ending in [] → ParseError (double-dress)", () => {
+		const err = expectErr(
+			listStyleGuide(
+				LISTSTYLE_OP.replace("labels", "id[]").replace("comma", "bracket"),
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.id[].listStyle");
+		expect(err.found).toContain("double-dress");
+	});
+
+	it("array default on a non-listStyle param → ParseError (every-call-throw class)", () => {
+		const err = expectErr(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(/listStyle: comma\n/, "").replace(
+					"      labels:",
+					"      labels:\n        default: [bug, help wanted]",
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.labels.default");
+		expect(err.expected).toContain("requires listStyle");
+	});
+
+	it("array default on a listStyle param parses cleanly", () => {
+		const guide = expectOk(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(
+					"listStyle: comma",
+					"listStyle: comma\n        default: [bug, docs]",
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(guide.operations[0]!.params["labels"]!.default).toEqual([
+			"bug",
+			"docs",
+		]);
+	});
+
+	it("empty array default on a listStyle param → ParseError (every-defaulted-call-throw class)", () => {
+		const err = expectErr(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(
+					"listStyle: comma",
+					"listStyle: comma\n        default: []",
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.labels.default");
+		expect(err.expected).toContain("non-empty array default");
+	});
+
+	it("array default with a non-scalar element → ParseError", () => {
+		const err = expectErr(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(
+					"listStyle: comma",
+					"listStyle: repeat\n        default: [ok, [nested, thing]]",
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.labels.default");
+		expect(err.expected).toContain("scalar");
+	});
+
+	it("array default with a comma-bearing element on a comma param → ParseError", () => {
+		const err = expectErr(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(
+					"listStyle: comma",
+					`listStyle: comma\n        default: ["a,b", "c"]`,
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.labels.default");
+		expect(err.expected).toContain("comma-free");
+	});
+
+	it("comma-bearing element is fine on a repeat param", () => {
+		const guide = expectOk(
+			listStyleGuide(
+				LISTSTYLE_OP.replace(
+					"listStyle: comma",
+					`listStyle: repeat\n        default: ["a,b", "c"]`,
+				),
+			),
+			{ filename: "example.com" },
+		);
+		expect(guide.operations[0]!.params["labels"]!.default).toEqual(["a,b", "c"]);
+	});
+
+	it("unknown param-spec key → ParseError (tripwire)", () => {
+		const err = expectErr(
+			listStyleGuide(LISTSTYLE_OP.replace("listStyle: comma", "listStyl: comma")),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.labels.listStyl");
+		expect(err.expected).toContain("unknown param-spec key");
+	});
+
+	it("typo'd required key → ParseError (the silent-drop class)", () => {
+		const err = expectErr(
+			listStyleGuide(`  - name: search
+    via: restGet
+    path: /search
+    params:
+      q:
+        requried: true
+`),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.q.requried");
+	});
+
+	it("scalar collision with pagination wire name stays legal (seeded pattern)", () => {
+		const guide = expectOk(
+			listStyleGuide(`  - name: list
+    via: paginate
+    path: /items
+    params:
+      page:
+        default: 0
+    pagination:
+      style: page
+      pageParam: page
+      pageSizeParam: per_page
+      itemsPath: data
+`),
+			{ filename: "example.com" },
+		);
+		expect(guide.operations[0]!.params["page"]!.default).toBe(0);
+	});
+
+	it("listStyle param colliding with an op-level pagination wire name → ParseError", () => {
+		const err = expectErr(
+			listStyleGuide(`  - name: list
+    via: paginate
+    path: /items
+    params:
+      page:
+        listStyle: repeat
+    pagination:
+      style: page
+      pageParam: page
+      pageSizeParam: per_page
+      itemsPath: data
+`),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.page.listStyle");
+		expect(err.found).toContain("pagination");
+	});
+
+	it("listStyle colliding with a guide-level pageParam → ParseError", () => {
+		const err = expectErr(
+			listStyleGuide(
+				`  - name: list
+    via: paginate
+    path: /items
+    params:
+      page:
+        listStyle: repeat
+`,
+				`pagination:
+  style: page
+  pageParam: page
+  pageSizeParam: per_page
+  itemsPath: data
+`,
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("operations[0].params.page.listStyle");
+	});
+
+	it("restGet op + guide-level pagination + colliding name parses (supersession is paginate-only)", () => {
+		const guide = expectOk(
+			listStyleGuide(
+				`  - name: search
+    via: restGet
+    path: /search
+    params:
+      page:
+        listStyle: repeat
+`,
+				`pagination:
+  style: page
+  pageParam: page
+  pageSizeParam: per_page
+  itemsPath: data
+`,
+			),
+			{ filename: "example.com" },
+		);
+		// The paginate loop is the only supersession site — a restGet op's
+		// params are never replaced, so the guide-level pageParam name is
+		// free to take a listStyle here.
+		expect(guide.operations[0]!.params["page"]!.listStyle).toBe("repeat");
+	});
+
+	it("listStyle colliding with a tokenBag continuation wire name → ParseError", () => {
+		const err = expectErr(
+			listStyleGuide(`  - name: list
+    via: paginate
+    path: /items
+    params:
+      rccontinue:
+        listStyle: comma
+    pagination:
+      style: tokenBag
+      itemsPath: query
+      continuationParams:
+        - continue.rccontinue
+`),
+			{ filename: "example.com" },
+		);
+		// The wire name derives from the last dot segment of the continuation
+		// path (continue.rccontinue → rccontinue), not the declared param.
+		expect(err.field).toBe("operations[0].params.rccontinue.listStyle");
 	});
 });

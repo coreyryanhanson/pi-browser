@@ -6,8 +6,9 @@
  * `secretRefs` merge (Client-Id rides alongside the Bearer token —
  * `makeOAuthGuide` in `__tests__/oauth.test.ts` declares no `secretRefs`,
  * so the merged-header behavior is untested there), cc auto-mint, the
- * token stamped into the right `(domain, grant, tokenUrl)` slot, and the
- * no-refresh re-mint on expiry (app tokens are not refreshable).
+ * token stamped into the right `(domain, grant, tokenUrl)` slot, the
+ * no-refresh re-mint on expiry (app tokens are not refreshable), and the
+ * `listStyle: repeat` wire form on the repeatable `id`/`login` params.
  *
  * Mint mechanics themselves (form encoding, refresh, skew, 401 scrub) stay
  * owned structurally by `__tests__/oauth.test.ts` — this guide proves the
@@ -151,6 +152,44 @@ describe("twitch oauth2 client_credentials (mocked transport)", () => {
 		// Stamped into the (twitch.tv, client_credentials, tokenUrl) slot.
 		const token = readToken(STORE_DOMAIN, "client_credentials", TT);
 		expect(token?.accessToken).toBe("APP-1");
+	});
+
+	it("listStyle: repeat on id/login fans out repeated wire pairs", async () => {
+		const { fetchUrl } = await import("../../core/transport.js");
+		const mock = vi.mocked(fetchUrl);
+		mock.mockResolvedValue({
+			status: 200,
+			headers: {},
+			body: JSON.stringify({ data: [{ id: "11" }, { id: "22" }] }),
+			cached: false,
+		});
+
+		setSecretsDir(join(tmpBase, "secrets"));
+		writeSecret(STORE_DOMAIN, "client_id", "MY_CLIENT");
+		writeSecret(STORE_DOMAIN, "client_secret", "S3CRET");
+		stubTokenEndpoint(() =>
+			tokenResponse({ access_token: "APP-1", expires_in: 3600 }),
+		);
+
+		const { guide } = await setupRecipe();
+		const outcome = await resolveOpForExecution(
+			guide,
+			findOp(guide, "users"),
+			"twitch",
+			{
+				userParams: { id: ["111", "222"] },
+			},
+		);
+		expect(outcome.ok).toBe(true);
+		const call = mock.mock.calls.at(-1)!;
+		const url = call[0];
+		// Repeated wire form — one pair per element, under the declared name.
+		expect(url).toContain("id=111&id=222");
+		expect(url).not.toContain("id=%5B");
+		// Surfaced params keep the widened array shape under the declared name.
+		if (outcome.ok) {
+			expect(outcome.result.params["id"]).toEqual(["111", "222"]);
+		}
 	});
 
 	it("expired app token with no refresh token → re-mints (never refreshes)", async () => {

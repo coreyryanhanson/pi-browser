@@ -841,7 +841,19 @@ function buildUrl(
 		Object.fromEntries(
 			Object.entries(queryParams)
 				.filter(([k, v]) => v !== undefined && !pathTokens.has(k))
-				.map(([k, v]) => [k, String(v)]),
+				.map(([k, v]) => {
+					// Probe has no guide schema to declare listStyle against, so
+					// non-scalar values are a loud error — never the silent
+					// String(v) wire form (String(["a","b"]) → "a,b" is
+					// accidentally comma-correct but misdescribes repeat/bracket
+					// APIs; [object Object] is wrong everywhere).
+					if (Array.isArray(v) || (typeof v === "object" && v !== null)) {
+						throw new Error(
+							`Param "${k}" is ${Array.isArray(v) ? "an array" : "an object"} — api-probe sends scalar params only: pre-join list values as a string, or JSON.stringify DSL params`,
+						);
+					}
+					return [k, String(v)] as [string, string];
+				}),
 		),
 	).toString();
 	return joinUrl(apiHost, substituted, qs);

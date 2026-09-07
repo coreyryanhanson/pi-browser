@@ -119,7 +119,8 @@ and copy a domain folder that matches your target.
 | `operations[].via` | op | — | executor: `restGet` \| `paginate` |
 | `operations[].path` | op | — | relative path; `{token}` = inferred path param (no re-declaration); a token declared in `auth.secretPathRefs` is store-filled instead — see [Static-key auth](#static-key-auth-in-the-guide) |
 | `operations[].accept` | op | `json` | `json` \| `xml` \| `<any media-type string>` — request-side `Accept` header (distinct from `responseShape.format`) |
-| `operations[].params` | op | `{}` | query params; `{ required?, default?, description? }` per key |
+| `operations[].params` | op | `{}` | query params; `{ required?, default?, description?, listStyle? }` per key — unknown keys are a parse error (typo tripwire) |
+| `operations[].params.<p>.listStyle` | op | — | multi-value serialization for an **array** value: `comma` joins with `,` (`id=a,b`), `repeat` fans out one pair per element (`id=a&id=b`), `bracket` fans out with the wire key dressed `+[]` (`id[]=a&id[]=b`). Absent = single-valued. Scalars ignore it entirely. An array on a non-`listStyle` param (or on a passthrough/date param) is a runtime error — pass a scalar or declare a style. A comma-bearing element on `comma` is rejected (the joined wire form is ambiguous). Empty arrays are rejected (the param would be silently dropped), as are non-scalar (`string \| number \| boolean`) elements. An array `default` follows the same rules at parse time (non-empty, scalar elements, comma-free on `comma`). With `bracket`, declare the clean name — a param name already ending in `[]` is a parse error (the wire key would double-dress). A `listStyle` param name may not collide with the op's effective pagination/tokenBag wire names (parse error — those writes supersede base params). |
 | `operations[].dateParams` | op | — | optional `{param: format}` → normalizes ISO dates to `iso8601` \| `yyyymmdd` \| `yyyy-mm-dd` (query params only) |
 | `operations[].helper` | op | `false` | `true` runs this domain's local helper for the op |
 | `operations[].transform` | op | `false` | `true` runs the helper's `transform` export on the parsed response (graceful — a throw returns raw data, never disables the op) |
@@ -322,6 +323,9 @@ per guide:
 - **Pre-call contract:** `(params, ctx) => params | Promise<params>` — a
   transform that receives the resolved param map (path + query merged,
   defaults filled) and returns the final map the executor templates and sends.
+  Array values in the returned map follow the same rules as agent-supplied
+  params: only valid on a param that declares `listStyle` (otherwise the call
+  throws — see the `listStyle` row above).
 - **Post-response transform (gated):** an optional `transform(data, ctx)`
   *named export* from the same `helper.ts`, run when an op declares
   `transform: true`. Graceful by contract — a throw is caught per-call and

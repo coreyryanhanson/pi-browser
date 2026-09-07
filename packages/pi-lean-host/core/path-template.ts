@@ -79,6 +79,21 @@ export function assertSafeDomain(domain: string): string {
 }
 
 /**
+ * Wire param name for a dotted/bracketed JSON path: the last dot segment
+ * with any quoted-bracket dress stripped ("continue.rccontinue" →
+ * "rccontinue", "['next']" → "next"). Shared by `advancePagination`
+ * (runtime tokenBag wire keys) and the parser's `listStyle` collision guard
+ * so the derivation exists exactly once and can't drift.
+ */
+export function wireParamName(key: string): string {
+	return key
+		.split(".")
+		.pop()!
+		.replace(/^\[['"]?/, "")
+		.replace(/['"]?\]$/, "");
+}
+
+/**
  * Non-decomposable Latin letters NFD can't split (single codepoints with no
  * canonical decomposition: ø ß æ œ ð þ ł). NFD handles the rest of the Latin
  * diacritic set (é ü å ñ ç …) via combining-mark strip. Non-Latin scripts

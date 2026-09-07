@@ -221,6 +221,33 @@ Param spec test guide.
 `;
 }
 
+function listStyleRecipe(apiHost: string): string {
+	return `---
+kind: api
+domains: [liststyle.example]
+icon: 🏷️
+shortName: ListStyle
+updated: 2026-07-17
+apiHost: ${apiHost}
+verified: 2026-07-17
+
+auth:
+  kind: none
+
+operations:
+  - name: search
+    via: restGet
+    path: /search
+    accept: json
+    params:
+      labels:
+        listStyle: comma
+        description: Comma-separated label names.
+---
+listStyle render test guide.
+`;
+}
+
 /** Recipe whose params carry `description` hints (format / semantics). */
 function descRecipe(apiHost: string): string {
 	return `---
@@ -705,6 +732,13 @@ describe("api-guide", () => {
 		const text = contentText(await callGuide("params.example"));
 		expect(text).toContain("params: q required");
 		expect(text).toContain("limit default 50");
+	});
+
+	it("renders listStyle in the per-param list", async () => {
+		await callLearn("liststyle.example", listStyleRecipe(ctx.serverUrl));
+		invalidateCache();
+		const text = contentText(await callGuide("liststyle.example"));
+		expect(text).toContain("labels (listStyle: comma)");
 	});
 
 	it("surfaces param descriptions and guide prose in op detail", async () => {
@@ -1726,4 +1760,30 @@ describe("api-fetch — path-secret guide (details-channel audit)", () => {
 		expect(text).not.toContain(TOKEN);
 		rmSync(tmpSecrets, { recursive: true, force: true });
 	});
+});
+
+// listStyle e2e — a repeat-style op surfaces the multi-value array in the
+// widened details.request.params shape (string | string[]), keyed by the
+// DECLARED name (the URL already shows the true wire form).
+it("api-fetch details.request.params carries a repeat-style param as a real array", async () => {
+	setUserGuidesDir(tmpGuidesDir);
+	invalidateCache();
+	const recipe = `---\nkind: api\ndomains: [multi.example]\nshortName: MultiVal\napiHost: ${ctx.serverUrl}\nresponseShape:\n  format: json\n  charset: utf-8\noperations:\n  - name: byIds
+    via: restGet
+    path: /legislacion-consolidada
+    accept: json
+    params:\n      id:\n        listStyle: repeat\n---\n`;
+	contentText(await callLearn("multi.example", recipe));
+	invalidateCache();
+
+	const res = await callFetch({
+		domain: "multi.example",
+		operation: "byIds",
+		params: { id: ["a", "b"] },
+	});
+	const details = res.details as {
+		request: { url: string; params: Record<string, unknown> };
+	};
+	expect(details.request.url).toContain("id=a&id=b");
+	expect(details.request.params["id"]).toEqual(["a", "b"]);
 });

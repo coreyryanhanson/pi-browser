@@ -11,7 +11,7 @@
  *
  * It encodes the axis-set audit matrix:
  *  - the kept set has exactly the finalized 14 synthetic guides;
- *  - the union covers all sixteen guide-driven axes;
+ *  - the union covers all seventeen guide-driven axes;
  *  - all six pagination styles are present (offset-limit, page, nextLink,
  *    cursor, resumptionToken, tokenBag);
  *  - all three realized auth kinds appear (none, static-key, oauth2).
@@ -189,6 +189,14 @@ describe("axis-coverage — every guide-driven axis is covered by ≥1 guide", (
 
 	it("requires-any-of (an at-least-one-of group on an op)", () => {
 		expect(allOps.some((o) => (o.requiresAnyOf?.length ?? 0) > 0)).toBe(true);
+	});
+
+	it("listStyle (a param declaring multi-value serialization)", () => {
+		expect(
+			allOps.some((o) =>
+				Object.values(o.params).some((p) => p.listStyle !== undefined),
+			),
+		).toBe(true);
 	});
 
 	it("dotted-key (a quoted-bracket nextLinkPath targeting a literal dot key)", () => {

@@ -275,11 +275,28 @@ export interface ResponseShape {
 export type ExecutorVia = "restGet" | "paginate";
 export type AcceptType = string;
 
+/** Multi-value query-param serialization styles (`listStyle`). */
+export const LIST_STYLES = ["comma", "repeat", "bracket"] as const;
+export type ListStyle = (typeof LIST_STYLES)[number];
+/** Boundary decoder: input is unvalidated (guide YAML). */
+export function isListStyle(v: unknown): v is ListStyle {
+	return (LIST_STYLES as readonly unknown[]).includes(v);
+}
+
 export interface QueryParamSpec {
 	required?: boolean;
 	default?: unknown;
 	/** Human-readable hint surfaced to the model via api-guide (format, semantics). */
 	description?: string;
+	/**
+	 * Multi-value serialization style. Absent = single-valued (today's
+	 * behavior; an array value is a runtime error). `comma` joins the array
+	 * with `,` (one pair), `repeat` fans out one pair per element under the
+	 * declared name, `bracket` fans out with the wire key dressed `+ "[]"`
+	 * (`id[]=a&id[]=b`). Scalar values ignore it entirely. Parser-validated;
+	 * the runtime serializer enforces the same rules.
+	 */
+	listStyle?: ListStyle;
 }
 
 export type DateParamFormat = "iso8601" | "yyyymmdd" | "yyyy-mm-dd";

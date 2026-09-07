@@ -528,7 +528,7 @@ describe("/api verify — param precheck + verify.json", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// Sentinel strip (P1 fix)
+// Sentinel strip
 // ═══════════════════════════════════════════════════════════════════
 
 describe("/api verify — sentinel strip", () => {

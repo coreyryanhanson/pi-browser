@@ -12,7 +12,7 @@ import { parse as yamlParse } from "yaml";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Guide } from "./guide-loader.js";
-import { extractPathTokens, slug } from "./path-template.js";
+import { extractPathTokens, slug, wireParamName } from "./path-template.js";
 import {
 	GATHER_ALL_MAX_FALLBACK,
 	GUIDE_SCHEMA_VERSION,
@@ -37,6 +37,8 @@ import {
 	type OAuth2TokenEndpointAuthMethod,
 	isOAuth2Grant,
 	isOAuth2TokenEndpointAuthMethod,
+	isListStyle,
+	LIST_STYLES,
 	oauth2GrantIssue,
 	OAUTH2_GRANTS,
 	OAUTH2_TOKEN_ENDPOINT_AUTH_METHODS,
@@ -92,6 +94,17 @@ export function stampFrontmatterField(
 }
 
 const VALID_VIA: ReadonlySet<string> = new Set(["restGet", "paginate"]);
+// Closed param-spec key allowlist — the unknown-key tripwire rejects
+// anything else (typo'd `listStyl:` / `requried:` must not silently no-op).
+// Exported for the allowlist↔parser tripwire in
+// __tests__/parse-api-guide.test.ts (same two-direction shape as
+// AUTH_ALLOWLISTS / PAGINATION_ALLOWLISTS).
+export const PARAM_SPEC_KEYS: ReadonlySet<string> = new Set([
+	"required",
+	"default",
+	"description",
+	"listStyle",
+]);
 // accept is a free-form string — any media type is valid (`json`/`xml`
 // shorthands are mapped by the helper).
 const VALID_FORMAT: ReadonlySet<string> = new Set(["json", "xml", "text"]);
@@ -1401,6 +1414,24 @@ function validateOperation(
 				);
 			}
 			const s = spec as Record<string, unknown>;
+			// Unknown-key tripwire — the param-spec schema is closed
+			// (required/default/description/listStyle). A typo'd key
+			// (`listStyl:`, `requried:`) must not be silently dropped: that's
+			// the silent-wrong-wire class. Same philosophy as the
+			// pagination/auth allowlists.
+			for (const k of Object.keys(s)) {
+				if (!PARAM_SPEC_KEYS.has(k)) {
+					return fail(
+						file,
+						fieldPath(`params.${key}.${k}`),
+						`one of: ${[...PARAM_SPEC_KEYS].join(" | ")} (unknown param-spec key)`,
+						`key "${k}"`,
+						{
+							fix: `Remove params.${key}.${k} — did you mean one of: ${[...PARAM_SPEC_KEYS].join(", ")}?`,
+						},
+					);
+				}
+			}
 			const paramSpec: QueryParamSpec = {};
 			if (s["required"] !== undefined) {
 				if (typeof s["required"] !== "boolean") {
@@ -1426,6 +1457,93 @@ function validateOperation(
 					);
 				}
 				paramSpec.description = s["description"];
+			}
+			if (s["listStyle"] !== undefined) {
+				if (!isListStyle(s["listStyle"])) {
+					return fail(
+						file,
+						fieldPath(`params.${key}.listStyle`),
+						`one of: ${LIST_STYLES.join(" | ")}`,
+						describeFound(s["listStyle"]),
+					);
+				}
+				paramSpec.listStyle = s["listStyle"];
+			}
+			// bracket double-dress — the style dresses the wire key with []
+			// itself; a declared name already ending in [] would double-dress
+			// (id[] + [] → id[][]=).
+			if (s["listStyle"] === "bracket" && key.endsWith("[]")) {
+				return fail(
+					file,
+					fieldPath(`params.${key}.listStyle`),
+					"a param name that does not already end in [] (bracket adds the dress itself)",
+					`"${key}" already ends in [] — the wire key would double-dress (id[][]=)`,
+					{
+						fix: `Declare the clean name (params.${key.slice(0, -2)}) with listStyle: bracket — the style appends [] to the wire key.`,
+					},
+				);
+			}
+			// Array default validation — both arms, same pass. An array default
+			// on a non-listStyle param would throw on every call at runtime
+			// (arrays are loud errors there once the serializer widening lands);
+			// catch the authoring error at parse time. On a listStyle param the
+			// elements are validated by the same rules the runtime serializer
+			// enforces (scalars only; no comma-bearing element on comma — the
+			// joined wire form can't distinguish it from a longer list).
+			if (Array.isArray(paramSpec.default)) {
+				if (paramSpec.listStyle === undefined) {
+					return fail(
+						file,
+						fieldPath(`params.${key}.default`),
+						"a scalar default (an array default requires listStyle)",
+						"an array default on a param without listStyle",
+						{
+							fix: `Declare listStyle: ${LIST_STYLES.join(" | ")} on params.${key}, or use a scalar default — an array value on a non-listStyle param fails on every call.`,
+						},
+					);
+				}
+				// Empty array default — the same every-call-throw class as the
+				// styleless case above: the runtime serializer rejects [] (the
+				// param would be silently dropped), so a defaulted call with no
+				// override always fails. Catch it at parse time.
+				if (paramSpec.default.length === 0) {
+					return fail(
+						file,
+						fieldPath(`params.${key}.default`),
+						"a non-empty array default (an empty array default throws on every defaulted call — the param would be silently dropped)",
+						"an empty array default ([])",
+						{
+							fix: `Omit params.${key}.default entirely, or default to a non-empty array — a caller-supplied [] on a listStyle param still fails per-call by design.`,
+						},
+					);
+				}
+				for (const el of paramSpec.default) {
+					if (
+						el === null ||
+						(typeof el !== "string" &&
+							typeof el !== "number" &&
+							typeof el !== "boolean")
+					) {
+						return fail(
+							file,
+							fieldPath(`params.${key}.default`),
+							"an array of scalar (string | number | boolean) elements",
+							`array contains ${describeFound(el)}`,
+						);
+					}
+					if (
+						paramSpec.listStyle === "comma" &&
+						typeof el === "string" &&
+						el.includes(",")
+					) {
+						return fail(
+							file,
+							fieldPath(`params.${key}.default`),
+							"comma-free elements (listStyle: comma joins with ',' — a comma-bearing element is indistinguishable from a longer list on the wire)",
+							`element "${el}" contains a comma`,
+						);
+					}
+				}
 			}
 			params[key] = paramSpec;
 		}
@@ -1607,6 +1725,71 @@ function validateOperation(
 				fix: "Add a top-level pagination: block or an op-level pagination: override",
 			},
 		);
+	}
+
+	// listStyle collision guard — under keyed supersession, pagination /
+	// tokenBag continuation writes REPLACE same-named base params, so a
+	// listStyle param colliding with an effective pagination wire name is
+	// dead (its listStyle could never reach the wire). Checked against the
+	// EFFECTIVE config (op-level ?? guide-level) — a guide-level pageParam
+	// collides too. Scoped to via: paginate — the supersession writes only
+	// happen in the paginate executor loop, so a restGet op's params are
+	// never replaced and no collision is possible there. tokenBag wire names
+	// derive via the same wireParamName helper advancePagination uses at
+	// runtime — one derivation, two consumers, no drift. Scope: listStyle
+	// params only; scalar collisions stay legal (the seeded
+	// `page: {default: 0}` + pageParam: page pattern).
+	if (via === "paginate" && effectivePagination !== undefined) {
+		const wireNames: string[] = [];
+		if (effectivePagination.style === "tokenBag") {
+			for (const key of effectivePagination.continuationParams ?? []) {
+				wireNames.push(wireParamName(key));
+			}
+		} else {
+			if (effectivePagination.pageParam)
+				wireNames.push(effectivePagination.pageParam);
+			if (effectivePagination.pageSizeParam)
+				wireNames.push(effectivePagination.pageSizeParam);
+			if (effectivePagination.cursorParam)
+				wireNames.push(effectivePagination.cursorParam);
+			if (effectivePagination.tokenParam)
+				wireNames.push(effectivePagination.tokenParam);
+		}
+		for (const [key, spec] of Object.entries(params)) {
+			if (spec.listStyle === undefined) continue;
+			if (wireNames.includes(key)) {
+				return fail(
+					file,
+					fieldPath(`params.${key}.listStyle`),
+					"a param name not colliding with this operation's pagination wire params",
+					`"${key}" is a pagination wire param (pagination.style: ${effectivePagination.style})`,
+					{
+						fix: `Rename params.${key} — pagination/tokenBag writes replace same-named base params, so the declared listStyle would never reach the wire.`,
+					},
+				);
+			}
+		}
+	}
+
+	// listStyle × dateParams — mutually exclusive by design: date params are
+	// single-valued (the runtime serializer throws before normalization on any
+	// array), so a declared listStyle can never reach the wire. A defaulted
+	// listStyle date param would additionally throw on every defaulted call —
+	// the same every-call-throw class the array-default guard above exists for.
+	if (dateParams !== undefined) {
+		for (const key of Object.keys(dateParams)) {
+			if (params[key]?.listStyle !== undefined) {
+				return fail(
+					file,
+					fieldPath(`dateParams.${key}`),
+					"a param not declaring listStyle (date params are single-valued — listStyle can never apply)",
+					`"${key}" declares both listStyle: ${params[key]!.listStyle} and a dateParams entry`,
+					{
+						fix: `Drop one of the two — keep dateParams.${key} for date normalization, or remove it and declare listStyle on params.${key} if the API truly accepts multi-value dates.`,
+					},
+				);
+			}
+		}
 	}
 
 	// gatherAllMax (op-level override)

@@ -495,9 +495,7 @@ describe("api-probe inline secretPathRefs (token-in-path)", () => {
 			{ auth: { secretPathRefs: { token: "path_key" } }, domain: "q.test" },
 		);
 		const calledUrl = fetchUrlMock.mock.calls[0]![0] as string;
-		expect(calledUrl).toBe(
-			"https://api.q.test/auths3cr3t%3APROBE-key/get",
-		);
+		expect(calledUrl).toBe("https://api.q.test/auths3cr3t%3APROBE-key/get");
 		expect(result.url).not.toContain(TOKEN);
 		expect(result.url).toContain("/auth***/get");
 		expect(result.finalUrl).not.toContain(TOKEN);
@@ -658,5 +656,79 @@ describe("cross-domain redirect hop — secret query params", () => {
 		expect(stripSecretQueryParams("not a url", new Set(["apikey"]))).toBe(
 			"not a url",
 		);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// listStyle e2e — multi-value params + secret merge order (mocked transport)
+// ═══════════════════════════════════════════════════════════════════
+
+describe("listStyle e2e — wire forms + secret merge order (mocked transport)", () => {
+	const ok = {
+		status: 200,
+		headers: {},
+		body: JSON.stringify({ ok: true }),
+		cached: false,
+	};
+
+	it("restGet repeat style: repeated pairs on the wire, secret rides BELOW them, surfaced URL redacted", async () => {
+		const guide = makeQueryGuide("https://q.test");
+		const op = makeOp("/api/ok", "restGet", {
+			params: { id: { listStyle: "repeat" } },
+		});
+		fetchUrlMock.mockResolvedValue(ok);
+		const result = await restGet(
+			"https://q.test",
+			op,
+			{ id: ["a", "b"] },
+			guide,
+			qAuth,
+		);
+		// Merge-order contract: the store-injected secret is appended after
+		// the agent's repeated pairs, never interleaved or above them.
+		const calledUrl = fetchUrlMock.mock.calls[0]![0] as string;
+		expect(calledUrl).toContain("id=a&id=b&apikey=REALKEY");
+		// Every surfaced URL redacts the secret by name; the pairs stay intact.
+		expect(result.url).toContain("id=a&id=b");
+		expect(result.url).toContain("apikey=***");
+		expect(result.url).not.toContain("REALKEY");
+		// Surfaced params: real array under the declared name, no secret.
+		expect(result.params["id"]).toEqual(["a", "b"]);
+		expect(result.params["apikey"]).toBeUndefined();
+	});
+
+	it("paginate bracket style: the [] dress survives URLSearchParams as %5B%5D on the fetched URL", async () => {
+		const guide = makeQueryGuide("https://q.test");
+		const op = makeOp("/api/list", "paginate", {
+			params: { id: { listStyle: "bracket" } },
+			pagination: {
+				style: "cursor",
+				cursorParam: "cursor",
+				cursorPath: "next",
+				itemsPath: "items",
+			},
+		});
+		// next: null → advance returns null → exactly one page.
+		fetchUrlMock.mockResolvedValue({
+			status: 200,
+			headers: {},
+			body: JSON.stringify({ items: [1], next: null }),
+			cached: false,
+		});
+		const result = await paginate(
+			"https://q.test",
+			op,
+			{ id: ["a", "b"] },
+			guide,
+			qAuth,
+		);
+		expect(result.pages).toBe(1);
+		const calledUrl = fetchUrlMock.mock.calls[0]![0] as string;
+		expect(calledUrl).toContain("id%5B%5D=a&id%5B%5D=b");
+		// Surfaced page URL is redacted; the bracket pairs stay intact.
+		expect(result.urls[0]).toContain("id%5B%5D=a&id%5B%5D=b");
+		expect(result.urls[0]).toContain("apikey=***");
+		expect(result.urls[0]).not.toContain("REALKEY");
+		expect(result.params["id"]).toEqual(["a", "b"]);
 	});
 });

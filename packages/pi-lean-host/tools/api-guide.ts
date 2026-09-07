@@ -216,6 +216,7 @@ function renderGuideDetail(
 				if (spec.required) parts.push("required");
 				if (spec.default !== undefined)
 					parts.push(`default ${JSON.stringify(spec.default)}`);
+				if (spec.listStyle) parts.push(`(listStyle: ${spec.listStyle})`);
 				return parts.join(" ");
 			});
 			lines.push(`    params: ${rendered.join(", ")}`);

@@ -223,6 +223,64 @@ export const PAGINATION_ALLOWLISTS: Record<
 	]),
 };
 
+// Op-block key allowlist — the closed-schema pass's largest surface. An
+// unknown op key (`errorPaths:` instead of `errorPath:`) used to parse clean
+// and silently no-op the intended behavior — worst case, a typo'd error
+// envelope never fires. Exported for the allowlist↔parser tripwire in
+// __tests__/parse-api-guide.test.ts (same two-direction shape as
+// PAGINATION_ALLOWLISTS). Not `pathParamDocs` — that's a parser-derived
+// OUTPUT field built from params.<token>.description, never authored.
+export const OP_ALLOWLIST: ReadonlySet<string> = new Set([
+	"name",
+	"via",
+	"path",
+	"accept",
+	"params",
+	"requiresAnyOf",
+	"dateParams",
+	"helper",
+	"transform",
+	"passthrough",
+	"parse",
+	"errorPath",
+	"pagination",
+	"gatherAllMax",
+]);
+
+// responseShape block allowlist — same closed-schema pass, same philosophy:
+// only `format` and `charset` are read; anything else is a typo.
+// Exported for the allowlist↔parser tripwire in
+// __tests__/parse-api-guide.test.ts.
+export const RESPONSE_SHAPE_ALLOWLIST: ReadonlySet<string> = new Set([
+	"format",
+	"charset",
+]);
+
+// Guide-frontmatter key allowlist — the closed-schema pass's third surface.
+// Exactly the 16 keys parseApiGuide reads from the parsed YAML mapping: the
+// 15 literal m["…"] sites plus `domains` (read via requireStringArray).
+// Deliberately NOT Object.keys(const guide) — that would drag in derived
+// non-authored fields (`content`, `category`, `source`). Exported for the
+// allowlist↔parser tripwire in __tests__/parse-api-guide.test.ts.
+export const GUIDE_ALLOWLIST: ReadonlySet<string> = new Set([
+	"kind",
+	"domains",
+	"shortName",
+	"updated",
+	"icon",
+	"apiHost",
+	"verified",
+	"docs",
+	"organization",
+	"description",
+	"schemaVersion",
+	"gatherAllMax",
+	"auth",
+	"responseShape",
+	"operations",
+	"pagination",
+]);
+
 // ═══════════════════════════════════════════════════════════════════
 // Error helper
 // ═══════════════════════════════════════════════════════════════════
@@ -666,6 +724,25 @@ function validateResponseShape(
 		);
 	}
 	const r = raw as Record<string, unknown>;
+
+	// responseShape allowlist — same closed-schema pass as OP_ALLOWLIST: only
+	// format/charset are read, so anything else is a typo that would
+	// silently no-op.
+	const unknownKeys = Object.keys(r).filter(
+		(k) => !RESPONSE_SHAPE_ALLOWLIST.has(k),
+	);
+	if (unknownKeys.length > 0) {
+		const first = unknownKeys[0]!; // guarded by the length check above
+		return fail(
+			file,
+			`${fieldPrefix}.${first}`,
+			`a known responseShape key (${[...RESPONSE_SHAPE_ALLOWLIST].join(", ")})`,
+			`unknown key(s): ${unknownKeys.join(", ")}`,
+			{
+				fix: `Remove ${fieldPrefix}.${first} — the responseShape schema is closed.`,
+			},
+		);
+	}
 
 	const formatRaw = r["format"];
 	let format: ResponseFormat = "json";
@@ -1274,6 +1351,8 @@ function validateOperation(
 	file: string | undefined,
 	topPagination: PaginationConfig | undefined,
 	guideResponseShape: ResponseShape,
+	injectedQuerySecretNames: ReadonlySet<string>,
+	authKind: string,
 ): Operation | ParseApiGuideResult {
 	const fieldPath = (leaf: string) => `operations[${index}].${leaf}`;
 
@@ -1286,6 +1365,23 @@ function validateOperation(
 		);
 	}
 	const o = raw as Record<string, unknown>;
+
+	// Op-block allowlist — reject keys not legal for an op (a typo like
+	// `errorPaths:` would silently no-op the intended behavior). Format
+	// mirrors the pagination per-style allowlist check.
+	const unknownKeys = Object.keys(o).filter((k) => !OP_ALLOWLIST.has(k));
+	if (unknownKeys.length > 0) {
+		const first = unknownKeys[0]!; // guarded by the length check above
+		return fail(
+			file,
+			fieldPath(first),
+			`a known op-block key (${[...OP_ALLOWLIST].join(", ")})`,
+			`unknown key(s): ${unknownKeys.join(", ")}`,
+			{
+				fix: `Remove operations[${index}].${first} — the op-block schema is closed.`,
+			},
+		);
+	}
 
 	// name
 	const name = o["name"];
@@ -1652,6 +1748,20 @@ function validateOperation(
 					describeFound(fmt),
 				);
 			}
+			// Declared-but-dead: date normalization runs only in query assembly
+			// (buildQueryParams), while fillPathTemplate fills path tokens raw —
+			// a dateParams entry naming a path token can never fire.
+			if (pathParams.includes(k)) {
+				return fail(
+					file,
+					fieldPath(`dateParams.${k}`),
+					"a query param name (not a path param)",
+					`"${k}" is a path param — dateParams normalization runs only in query assembly, and path tokens are filled raw, so the declaration can never fire`,
+					{
+						fix: `Put the ISO date directly in the path (the real pattern: Polygon.io aggregates {from}/{to}, Frankfurter /{date}) — a future normalization for path tokens would be additive.`,
+					},
+				);
+			}
 		}
 		dateParams = dateParamsRaw as Record<string, DateParamFormat>;
 	}
@@ -1831,6 +1941,32 @@ function validateOperation(
 				);
 			}
 		}
+		// Injected query-secret names vs pagination wire names — the paginate
+		// URL is built as { ...pageParams, ...secretParams } (core/helpers.ts),
+		// so the secret spreads last and overwrites the pagination value on
+		// every page request: pagination silently never advances (valid-looking
+		// 200s, page one forever). Injected names = static-key secretQueryRefs
+		// key names plus oauth2 paramStyle: query's access_token — the same
+		// secretQueryParams seam (core/auth.ts), merged last in the same spread.
+		// Scoped to via: paginate like the listStyle guard — a restGet op never
+		// builds pageParams, so a colliding name is legal there (the guide-level
+		// secretQueryRefs-vs-params check must NOT extend to wire names).
+		for (const secretName of injectedQuerySecretNames) {
+			if (wireNames.includes(secretName)) {
+				const isOAuth2 = authKind === "oauth2";
+				return fail(
+					file,
+					isOAuth2 ? "auth.paramStyle" : `auth.secretQueryRefs.${secretName}`,
+					"an injected query-secret name not colliding with this operation's pagination wire params",
+					`"${secretName}" is a pagination wire param of operation "${name}" (pagination.style: ${effectivePagination.style}) — the injected secret overwrites the pagination value on every page request, so pagination never advances past page one`,
+					{
+						fix: isOAuth2
+							? `Set auth.paramStyle to bearer-header (or rename the wire param in operation "${name}"'s pagination block) — the query-injected access_token is merged after the pagination params and wins every page request.`
+							: `Rename the secret ref in auth.secretQueryRefs (or the wire param in operation "${name}"'s pagination block) — the secret is merged after the pagination params and wins every page request.`,
+					},
+				);
+			}
+		}
 	}
 
 	// listStyle × dateParams — mutually exclusive by design: date params are
@@ -2006,6 +2142,24 @@ export function parseApiGuide(
 	}
 	const m = meta as Record<string, unknown>;
 
+	// Frontmatter allowlist — reject keys parseApiGuide never reads (a typo'd
+	// top-level key would be silently ignored today and hard-fail later once
+	// the schema is published). Same closed-schema check as the op-block
+	// allowlist; format mirrors the pagination per-style allowlist check.
+	const unknownFmKeys = Object.keys(m).filter((k) => !GUIDE_ALLOWLIST.has(k));
+	if (unknownFmKeys.length > 0) {
+		const first = unknownFmKeys[0]!; // guarded by the length check above
+		return fail(
+			file,
+			first,
+			`a known frontmatter key (${[...GUIDE_ALLOWLIST].join(", ")})`,
+			`unknown key(s): ${unknownFmKeys.join(", ")}`,
+			{
+				fix: `Remove ${first} from the frontmatter — the guide schema is closed.`,
+			},
+		);
+	}
+
 	// ── projection slice ──────────────────────────────────────────
 	const kindRaw = m["kind"];
 	if (kindRaw !== undefined && kindRaw !== "api") {
@@ -2180,10 +2334,30 @@ export function parseApiGuide(
 		);
 	}
 	const operations: Operation[] = [];
+	// Injected query-secret names (the secretQueryParams seam in core/auth.ts):
+	// static-key secretQueryRefs key names, plus oauth2 paramStyle: query's
+	// access_token. Derived once here (auth is validated above) and passed to
+	// every validateOperation for the paginate wire-name collision check.
+	const injectedQuerySecretNames: ReadonlySet<string> = new Set([
+		...(auth.kind === "static-key" && auth.secretQueryRefs
+			? Object.keys(auth.secretQueryRefs)
+			: []),
+		...(auth.kind === "oauth2" && auth.paramStyle === "query"
+			? ["access_token"]
+			: []),
+	]);
 	for (let i = 0; i < opsRaw.length; i++) {
 		const opRaw = opsRaw[i];
 		if (opRaw === undefined) continue;
-		const opRes = validateOperation(opRaw, i, file, pagination, responseShape);
+		const opRes = validateOperation(
+			opRaw,
+			i,
+			file,
+			pagination,
+			responseShape,
+			injectedQuerySecretNames,
+			auth.kind,
+		);
 		if (!("name" in opRes)) return opRes as ParseApiGuideResult;
 		operations.push(opRes);
 	}
@@ -2208,6 +2382,29 @@ export function parseApiGuide(
 						},
 					);
 				}
+			}
+		}
+	}
+
+	// Cross-field (oauth2 arm of the same D1 class): on paramStyle: query the
+	// injected access_token must not be a declared op param — it spreads last
+	// in `{ ...query, ...secretParams }`, so the agent's value would be
+	// silently overwritten. Scoped to paramStyle: query — with the default
+	// bearer-header the token rides the Authorization header and a legit
+	// access_token query param is legal. Paginate ops with access_token as a
+	// wire name are already rejected earlier by the wire-name collision check.
+	if (auth.kind === "oauth2" && auth.paramStyle === "query") {
+		for (const dOp of operations) {
+			if ("access_token" in dOp.params) {
+				return fail(
+					file,
+					"auth.paramStyle",
+					"an injected query-secret name not declared in any operation's params",
+					`also a param of operation "${dOp.name}"`,
+					{
+						fix: `Remove access_token from operation "${dOp.name}"'s params map — it is code-injected from the token store on paramStyle: query and the agent must not be able to set it.`,
+					},
+				);
 			}
 		}
 	}

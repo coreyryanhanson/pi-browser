@@ -72,7 +72,11 @@ advisory, the frontmatter is authoritative.**
 A `guide.md` opens with a `---`-delimited YAML frontmatter block and
 closes it with a second `---`; the prose body follows. An operation can
 override the guide-level `pagination` / `responseShape` with its own block
-in the frontmatter.
+in the frontmatter. The schema is **closed**: an unknown key anywhere in
+the frontmatter, an op block, or a `responseShape` block is a hard parse
+error (no warning-only path), and so are dead declarations — `dateParams`
+naming a path token, or a `secretQueryRefs`/query-injected name colliding
+with an effective pagination wire name on a paginate op.
 
 The fastest way to a first guide is to let the tools draft it:
 `api-learn({domain, new: true})` returns a fail-closed starter template,

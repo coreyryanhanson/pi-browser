@@ -169,14 +169,21 @@ Read-only subcommands (`status`, `helpers`, bare `/api`) stay unguarded.
   re-attempted on `session_start` in case host loads before portal.
 - **One parser, two call sites**: `parseApiGuide()` validates before write
   (`api-learn`) and before use (loader). Don't add a second parser.
-- **Pagination key allowlists**: `PAGINATION_ALLOWLISTS`
-  (`core/parse-api-guide.ts`, per-style `ReadonlySet`, mirrors
-  `AUTH_ALLOWLISTS`) — `validatePagination()` rejects unknown pagination
-  keys (typo → `ParseError` naming the key + the style's valid keys)
-  instead of silently single-paging at runtime. A tripwire test asserts the
-  allowlist **equals** the keys the parser actually reads (both
-  directions); any future pagination field must be added to its style's
-  allowlist in the same commit.
+- **Closed schema (key allowlists)**: the schema is closed — every authored
+  surface rejects unknown keys with a `ParseError` naming the key + the
+  valid set: `PAGINATION_ALLOWLISTS` (per-style, mirrors `AUTH_ALLOWLISTS`),
+  `OP_ALLOWLIST`, `GUIDE_ALLOWLIST`, and `RESPONSE_SHAPE_ALLOWLIST`
+  (all in `core/parse-api-guide.ts`). A tripwire test asserts each allowlist
+  **equals** the keys the parser actually reads (both directions); any
+  future field must be added to its surface's allowlist in the same commit.
+  Dead declarations are also parse errors: `dateParams` naming a path token
+  (normalization runs only in query assembly; `fillPathTemplate` fills path
+  tokens raw) and, on paginate ops, a query-injected secret name colliding
+  with an effective pagination wire name (`pageParam`/`pageSizeParam`/
+  `cursorParam`/`tokenParam`/tokenBag continuation keys, or oauth2
+  `paramStyle: query` `access_token`) — the secret spreads last in
+  `{ ...pageParams, ...secretParams }`, so pagination silently never
+  advances.
 - **No mutations v1**: `via` accepts only `restGet` and `paginate`.
 - **Error envelopes (`errorPath`)**: op-level optional field naming a path that,
 when it resolves to anything other than `undefined` in the parsed 200 body,
@@ -243,10 +250,20 @@ speculatively.
   cross-map shared key with `secretQueryRefs`), plus literal `headers`.
   - **Parser-enforced invariants**: every `secretRefs` value targets a name
     the secrets store would accept; a `secretQueryRefs` param colliding with
-    any op's `params` map is an error; `secretPathRefs` collisions and
-    required-only violations are parse errors (see above). (`oauth2`
+    any op's `params` map is an error (as is, on paginate ops only, a
+    colliding effective pagination wire name — the guide-level D1 check is
+    not extended, so restGet-only guides stay legal); `secretPathRefs`
+    collisions and required-only violations are parse errors (see above). (`oauth2`
     parses — see the `GUIDE_SCHEMA_VERSION` section below;
-    `validateOAuth2Auth` enforces its grant invariants.)
+    `validateOAuth2Auth` enforces its grant invariants.) The same D1 class
+    guards oauth2 `paramStyle: query`: an op (restGet or paginate) declaring
+    `access_token` in its `params` map is a parse error on `auth.paramStyle` —
+    the injected token spreads last in `{ ...query, ...secretParams }` and
+    would silently overwrite the agent's value. Scoped to `paramStyle: query`;
+    with the default `bearer-header` the token rides the Authorization header
+    and a legit `access_token` query param stays legal. Undeclared caller
+    `access_token` on a `passthrough` op is also legal (the passthrough branch
+    skips injected secret names).
   - **Injection**: `api-fetch` resolves store secrets via
     `resolveSecretHeaders()` / `resolveSecretQueryParams()` /
     `resolveSecretPathParams()` and injects them in code — the value never

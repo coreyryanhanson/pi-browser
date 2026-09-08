@@ -28,8 +28,12 @@ import {
 	PAGINATION_ALLOWLISTS,
 	AUTH_ALLOWLISTS,
 	PARAM_SPEC_KEYS,
+	GUIDE_ALLOWLIST,
+	OP_ALLOWLIST,
+	RESPONSE_SHAPE_ALLOWLIST,
 } from "../core/parse-api-guide.js";
 import { slug } from "../core/path-template.js";
+import { parse as yamlParse } from "yaml";
 import {
 	GATHER_ALL_MAX_FALLBACK,
 	type ApiGuide,
@@ -1947,6 +1951,29 @@ body
 		expect(err.expected).toContain("listStyle can never apply");
 	});
 
+	it("rejects dateParams naming a path token (declared-but-dead)", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+operations:
+  - name: getAggregate
+    via: restGet
+    path: /aggs/{ticker}/range/{from}/{to}
+    dateParams:
+      from: iso8601
+---
+body
+`;
+		const err = expectErr(raw);
+		expect(err.field).toBe("operations[0].dateParams.from");
+		expect(err.found).toContain("path param");
+		expect(err.found).toContain("can never fire");
+		// Real pattern + additive-future pointer, per the dead-declaration class.
+		expect(err.fix).toContain("Polygon.io");
+		expect(err.fix).toContain("Frankfurter");
+		expect(err.fix).toContain("additive");
+	});
+
 	it("accepts operation without dateParams", () => {
 		const raw = `---
 domains: [example.com]
@@ -2544,6 +2571,212 @@ describe("parseApiGuide — param-spec key allowlist tripwire", () => {
 	});
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// Allowlist round-trip fixture — one guide carrying EVERY allowlisted key
+// on every authored surface (frontmatter, op block, responseShape at both
+// levels). The tripwire tests parse the same frontmatter two ways: raw
+// YAML (to assert its key sets EQUAL the allowlists) and through
+// parseApiGuide (to assert every key is accepted and lands on the parsed
+// result). Drift fails loudly in every direction: adding an allowlist key
+// without a fixture value fails the coverage assertion, dropping one
+// fails the fixture's own parse (unknown key), and a key the parser stops
+// reading fails the landed assertions. Note: `pathParamDocs` is
+// deliberately absent — it's a parser-derived OUTPUT field built from
+// params.<token>.description, never an authored op-block key.
+// ═══════════════════════════════════════════════════════════════════
+
+const ROUNDTRIP_FM = `kind: api
+domains: [roundtrip.example]
+shortName: RoundTrip
+updated: 2026-01-02
+icon: 🧪
+apiHost: https://api.roundtrip.example/v1
+verified: 2026-01-02
+docs: https://docs.roundtrip.example
+organization: RoundTrip Org
+description: one guide carrying every allowlisted key
+schemaVersion: 1
+gatherAllMax: 42
+auth:
+  kind: none
+responseShape:
+  format: xml
+  charset: iso-8859-1
+pagination:
+  style: page
+  itemsPath: rows
+  pageParam: p
+  pageSizeParam: perPage
+operations:
+  - name: getAll
+    via: paginate
+    path: /things
+    accept: json
+    params:
+      from:
+        description: start date
+      kind:
+        description: filter
+    requiresAnyOf: [kind]
+    dateParams:
+      from: iso8601
+    helper: true
+    transform: true
+    passthrough: true
+    parse:
+      format: json
+      charset: utf-8
+    errorPath: error
+    pagination:
+      style: offset-limit
+      itemsPath: results
+      pageParam: page
+      pageSizeParam: perPage
+    gatherAllMax: 7
+`;
+
+function roundtripGuide(): ApiGuide {
+	return expectOk(`---\n${ROUNDTRIP_FM}---\nbody`);
+}
+function roundtripFm(): Record<string, unknown> {
+	return yamlParse(ROUNDTRIP_FM) as Record<string, unknown>;
+}
+
+describe("parseApiGuide — op-block + responseShape allowlist (closed schema)", () => {
+	// Round-trip tripwire — see the ROUNDTRIP_FM block comment for the
+	// drift directions this closes.
+	it("every OP_ALLOWLIST + RESPONSE_SHAPE_ALLOWLIST key parses and lands", () => {
+		const fm = roundtripFm();
+		const op = (fm["operations"] as Record<string, unknown>[])[0]!;
+		expect(Object.keys(op).sort()).toEqual([...OP_ALLOWLIST].sort());
+		expect(
+			Object.keys(fm["responseShape"] as Record<string, unknown>).sort(),
+		).toEqual([...RESPONSE_SHAPE_ALLOWLIST].sort());
+		expect(Object.keys(op["parse"] as Record<string, unknown>).sort()).toEqual(
+			[...RESPONSE_SHAPE_ALLOWLIST].sort(),
+		);
+
+		const getAll = roundtripGuide().operations[0]!;
+		expect(getAll.name).toBe("getAll");
+		expect(getAll.via).toBe("paginate");
+		expect(getAll.path).toBe("/things");
+		expect(getAll.accept).toBe("json");
+		expect(Object.keys(getAll.params).sort()).toEqual(["from", "kind"]);
+		expect(getAll.requiresAnyOf).toEqual(["kind"]);
+		expect(getAll.dateParams).toEqual({ from: "iso8601" });
+		expect(getAll.helper).toBe(true);
+		expect(getAll.transform).toBe(true);
+		expect(getAll.passthrough).toBe(true);
+		expect(getAll.parse).toEqual({ format: "json", charset: "utf-8" });
+		expect(getAll.errorPath).toBe("error");
+		expect(getAll.pagination?.style).toBe("offset-limit");
+		expect(getAll.gatherAllMax).toBe(7);
+	});
+
+	// The backlog's worst case: a typo'd error envelope parses clean and
+	// never fires — the guide returns data while the author believes
+	// 200-with-error pages are caught. The allowlist must catch it at parse.
+	it("typo'd op key (errorPaths:) → ParseError naming the key", () => {
+		const err = expectErr(
+			MINIMAL.replace(
+				"    path: /things/{id}",
+				'    path: /things/{id}\n    errorPaths: "detail"',
+			),
+		);
+		expect(err.field).toBe("operations[0].errorPaths");
+		expect(err.expected).toContain("known op-block key");
+		expect(err.expected).toContain("errorPath"); // pointer to the valid keys
+		expect(err.found).toContain("errorPaths");
+	});
+
+	it("unknown guide-level responseShape key → ParseError", () => {
+		const err = expectErr(
+			MINIMAL.replace(
+				"apiHost: https://api.example.com/v1",
+				"apiHost: https://api.example.com/v1\nresponseShape:\n  format: json\n  charSet: utf-8",
+			),
+		);
+		expect(err.field).toBe("responseShape.charSet");
+		expect(err.expected).toContain("known responseShape key");
+	});
+
+	it("op-level parse override with an unknown key → ParseError", () => {
+		const err = expectErr(
+			MINIMAL.replace(
+				"    path: /things/{id}",
+				"    path: /things/{id}\n    parse:\n      format: json\n      encoding: utf-8",
+			),
+		);
+		expect(err.field).toBe("operations[0].parse.encoding");
+		expect(err.expected).toContain("known responseShape key");
+	});
+
+	it("minimal known-good guide still parses (op + responseShape surfaces)", () => {
+		const guide = expectOk(MINIMAL.replace("/v1", ""));
+		expect(guide.operations[0]!.name).toBe("getThing");
+	});
+});
+
+describe("parseApiGuide — guide frontmatter allowlist (closed schema)", () => {
+	// Round-trip tripwire — same fixture, guide-side assertions. Deliberately
+	// NOT Object.keys(const guide) for the landed side: the parsed object
+	// drags in derived non-authored fields (`content`, `category`, `source`).
+	it("every GUIDE_ALLOWLIST key is authored, accepted, and lands on the guide", () => {
+		expect(Object.keys(roundtripFm()).sort()).toEqual(
+			[...GUIDE_ALLOWLIST].sort(),
+		);
+
+		const guide = roundtripGuide();
+		expect(guide.kind).toBe("api");
+		expect(guide.domains).toEqual(["roundtrip.example"]);
+		expect(guide.shortName).toBe("RoundTrip");
+		expect(guide.updated).toBe("2026-01-02");
+		expect(guide.icon).toBe("🧪");
+		expect(guide.apiHost).toBe("https://api.roundtrip.example/v1");
+		expect(guide.verified).toBe("2026-01-02");
+		expect(guide.docs).toBe("https://docs.roundtrip.example");
+		expect(guide.organization).toBe("RoundTrip Org");
+		expect(guide.description).toBe("one guide carrying every allowlisted key");
+		expect(guide.schemaVersion).toBe(1);
+		expect(guide.gatherAllMax).toBe(42);
+		expect(guide.auth).toEqual({ kind: "none" });
+		expect(guide.responseShape).toEqual({
+			format: "xml",
+			charset: "iso-8859-1",
+		});
+		expect(guide.pagination?.style).toBe("page");
+		expect(guide.pagination?.pageParam).toBe("p");
+		expect(guide.operations).toHaveLength(1);
+	});
+
+	// A typo'd top-level key (the plan's example: `operations:` typo'd) is
+	// silently ignored today — the guide parses with zero operations.
+	it("typo'd frontmatter key (operationss:) → ParseError naming the key", () => {
+		const err = expectErr(MINIMAL.replace("operations:", "operationss:"));
+		expect(err.field).toBe("operationss");
+		expect(err.expected).toContain("known frontmatter key");
+		expect(err.expected).toContain("operations"); // pointer to the valid keys
+		expect(err.found).toContain("operationss");
+	});
+
+	it("multiple unknown frontmatter keys are all named in the error", () => {
+		const err = expectErr(
+			MINIMAL.replace(
+				"domains: [example.com]",
+				"domains: [example.com]\ntotallyUnknownGuideKey: true\nanotherStrayKey: 2",
+			),
+		);
+		expect(err.found).toContain("totallyUnknownGuideKey");
+		expect(err.found).toContain("anotherStrayKey");
+	});
+
+	it("minimal known-good guide still parses (frontmatter surface)", () => {
+		const guide = expectOk(MINIMAL);
+		expect(guide.domains).toEqual(["example.com"]);
+		expect(guide.operations).toHaveLength(1);
+	});
+});
+
 describe("parseApiGuide — secretPathRefs", () => {
 	function guideWithOps(authYaml: string, opsYaml: string) {
 		return `---
@@ -3035,5 +3268,232 @@ describe("parseApiGuide — listStyle", () => {
 		// The wire name derives from the last dot segment of the continuation
 		// path (continue.rccontinue → rccontinue), not the declared param.
 		expect(err.field).toBe("operations[0].params.rccontinue.listStyle");
+	});
+});
+
+// ═════════════════════════════════════════════════════════════════
+// Injected query-secret names vs pagination wire names (paginate ops)
+// ═════════════════════════════════════════════════════════════════
+
+describe("parseApiGuide — secretQueryRefs vs pagination wire names", () => {
+	// The paginate URL is built as { ...pageParams, ...secretParams } — the
+	// secret spreads last and overwrites the pagination value on every page
+	// request, so pagination silently never advances past page one.
+	const secretGuide = (opYaml: string, topPagination = "") => `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+auth:
+  kind: static-key
+  secretQueryRefs:
+    page:
+      secret: api_key
+${topPagination}
+operations:
+${opYaml}
+---
+Prose body.
+`;
+
+	const PAGE_PAGINATION = `pagination:
+  style: page
+  pageParam: page
+  pageSizeParam: per_page
+  itemsPath: data
+`;
+
+	it("paginate op: secretQueryRefs name colliding with pageParam → ParseError", () => {
+		const err = expectErr(
+			secretGuide(
+				`  - name: list
+    via: paginate
+    path: /items
+`,
+				PAGE_PAGINATION,
+			),
+			{ filename: "example.com" },
+		);
+		expect(err.field).toBe("auth.secretQueryRefs.page");
+		expect(err.found).toContain('"page" is a pagination wire param');
+		expect(err.found).toContain(
+			"overwrites the pagination value on every page request",
+		);
+		expect(err.fix).toContain("Rename the secret ref");
+	});
+
+	it("tokenBag continuation wire name collides too", () => {
+		const err = expectErr(
+			secretGuide(`  - name: list
+    via: paginate
+    path: /items
+    pagination:
+      style: tokenBag
+      itemsPath: query
+      continuationParams:
+        - continue.page
+`),
+			{ filename: "example.com" },
+		);
+		// continue.page → wire name "page" (last dot segment), which the
+		// secretQueryRefs ref above also claims.
+		expect(err.field).toBe("auth.secretQueryRefs.page");
+	});
+
+	it("restGet op with the same collision stays legal (supersession is paginate-only)", () => {
+		const guide = expectOk(
+			secretGuide(
+				`  - name: search
+    via: restGet
+    path: /search
+`,
+				PAGE_PAGINATION,
+			),
+			{ filename: "example.com" },
+		);
+		expect(guide.operations[0]!.via).toBe("restGet");
+	});
+
+	it("oauth2 paramStyle: query injects access_token — colliding wire name → ParseError", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+auth:
+  kind: oauth2
+  grant: client_credentials
+  tokenUrl: https://auth.example.com/token
+  clientId: { secret: my_client }
+  clientSecret: { secret: client_secret }
+  paramStyle: query
+pagination:
+  style: page
+  pageParam: access_token
+  pageSizeParam: per_page
+  itemsPath: data
+operations:
+  - name: list
+    via: paginate
+    path: /items
+---
+Prose body.
+`;
+		const err = expectErr(raw, { filename: "example.com" });
+		expect(err.field).toBe("auth.paramStyle");
+		expect(err.found).toContain("overwrites the pagination value");
+		expect(err.fix).toContain("bearer-header");
+	});
+
+	it("oauth2 default paramStyle (bearer-header) with an access_token pageParam parses", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+auth:
+  kind: oauth2
+  grant: client_credentials
+  tokenUrl: https://auth.example.com/token
+  clientId: { secret: my_client }
+  clientSecret: { secret: client_secret }
+pagination:
+  style: page
+  pageParam: access_token
+  pageSizeParam: per_page
+  itemsPath: data
+operations:
+  - name: list
+    via: paginate
+    path: /items
+---
+Prose body.
+`;
+		const guide = expectOk(raw, { filename: "example.com" });
+		expect(guide.pagination?.pageParam).toBe("access_token");
+	});
+
+	it("non-colliding static-key paginate op parses (negative control)", () => {
+		const guide = expectOk(
+			secretGuide(
+				`  - name: list
+    via: paginate
+    path: /items
+`,
+				PAGE_PAGINATION.replace("pageParam: page", "pageParam: offset"),
+			),
+			{ filename: "example.com" },
+		);
+		expect(guide.operations[0]!.via).toBe("paginate");
+	});
+});
+
+// ═════════════════════════════════════════════════════════════════
+// oauth2 paramStyle: query — injected access_token vs declared op params
+// (restGet arm of the D1 cross-field check)
+// ═════════════════════════════════════════════════════════════════
+
+describe("parseApiGuide — oauth2 query access_token vs op params", () => {
+	const OAUTH2_QUERY_AUTH = `auth:
+  kind: oauth2
+  grant: client_credentials
+  tokenUrl: https://auth.example.com/token
+  clientId: { secret: my_client }
+  clientSecret: { secret: client_secret }
+  paramStyle: query
+`;
+
+	it("restGet op declaring params.access_token → ParseError (injected param is agent-suppliable collision)", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+${OAUTH2_QUERY_AUTH}operations:
+  - name: search
+    via: restGet
+    path: /search
+    params:
+      access_token:
+        required: true
+---
+Prose body.
+`;
+		const err = expectErr(raw, { filename: "example.com" });
+		expect(err.field).toBe("auth.paramStyle");
+		expect(err.found).toContain('also a param of operation "search"');
+		expect(err.fix).toContain("code-injected from the token store");
+	});
+
+	it("bearer-header (default) with the same params.access_token stays legal", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+auth:
+  kind: oauth2
+  grant: client_credentials
+  tokenUrl: https://auth.example.com/token
+  clientId: { secret: my_client }
+  clientSecret: { secret: client_secret }
+operations:
+  - name: search
+    via: restGet
+    path: /search
+    params:
+      access_token:
+        required: true
+---
+Prose body.
+`;
+		const guide = expectOk(raw, { filename: "example.com" });
+		expect(guide.operations[0]!.name).toBe("search");
+	});
+
+	it("passthrough op with an undeclared caller-supplied access_token stays legal (runtime skips injected names)", () => {
+		const raw = `---
+domains: [example.com]
+apiHost: https://api.example.com/v1
+${OAUTH2_QUERY_AUTH}operations:
+  - name: query
+    via: restGet
+    path: /query
+    passthrough: true
+---
+Prose body.
+`;
+		const guide = expectOk(raw, { filename: "example.com" });
+		expect(guide.operations[0]!.passthrough).toBe(true);
 	});
 });

@@ -359,7 +359,11 @@ speculatively.
   `http://127.0.0.1/callback` redirect convention (RFC 8252 §7.3) —
   host-only, no portal import, no listener, no inbound network surface),
   `transport.ts` (shared fetch pipeline: UA, charset, gzip/deflate
-  response decompression, 429-retry, ETag cache —
+  response decompression, 429-retry, grant-based cache — a 2xx is stored
+  only on an explicit server grant (`Cache-Control: max-age` time grant
+  or an ETag validator grant; no fabricated TTL fallback), `no-store`
+  never stored, `no-cache` revalidate-only, read/revalidate/304 arms
+  gated on `!hasAuth` and `!fresh` (fresh still seeds the store) —
   the sanctioned way to reach even WAF'd hosts), `path-template.ts` (path
   templating + the exported `tokenizeJsonPath`, shared by the parser and the
   executor — the parser must never import the executor module),
@@ -414,7 +418,12 @@ speculatively.
   `schemaVersion` frontmatter), `transform-{restget,paginate,render}`,
   `transport` (A3 Retry-After HTTP-date / exponential-backoff parsing +
   gzip/deflate response decompression — no recipe can reliably force a
-  429, so the unit test is the proof),
+  429, so the unit test is the proof — plus the grant-based cache suite:
+  no-grant-not-stored matrix, `no-cache` stickiness, 304 grant
+  refresh/no-store delete, eviction-race (arrival-order independent),
+  fresh-seeding, and the auth/fresh 304-arm gates),
+  `path-secrets-transport` (path-secret requests skip the cache read,
+  write, and 304 arms),
   `api-probe`, `verify-command` (mocked-transport: strict threshold, auth
   precheck, param precheck, `verify.json`, helper-disabled skip),
   `status-hint` (shared 403 classifier: server-message extraction +

@@ -86,6 +86,9 @@ export interface RestGetResult {
 	params: Record<string, string | string[]>;
 	/** Set when a post-response transform throws (raw `data` preserved). */
 	transformWarning?: string;
+	/** True when the transport served this response from cache (header hit
+	 *  or 304 revalidation). Absent for live fetches. */
+	cached?: boolean;
 }
 
 export interface PaginateResult {
@@ -862,6 +865,7 @@ export async function restGet(
 		url,
 		params: query,
 		...(transformWarning === undefined ? {} : { transformWarning }),
+		...(result.cached ? { cached: true } : {}),
 	};
 }
 

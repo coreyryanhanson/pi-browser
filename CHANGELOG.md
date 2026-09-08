@@ -15,7 +15,11 @@
   place there execute — bundled recipes are inert reference material.
   Ships 7 tools (`api-guide`, `api-fetch`, `api-learn`, `api-probe`,
   `api-scaffold`, `api-store`, `oauth-mint`)
-  and the `/api` command. The package declares `pi-lean-portal` as an
+  and the `/api` command. The transport caches responses only on an
+  explicit server freshness grant — `Cache-Control: max-age`, or an
+  `ETag` revalidated via 304 (no fabricated TTL fallback, never stale);
+  `api-fetch` accepts a `fresh` param to force a full network fetch and
+  flags cache-served results. The package declares `pi-lean-portal` as an
   **optional peer dependency** — host-only installs are valid.
 - **`/api` toggle — independent peer of `/web`** — `on|off|learn|status`
   plus `helpers`, `secrets`, `verify`, `delete`, `oauth`, and `bootstrap`

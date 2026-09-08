@@ -494,8 +494,12 @@ async function createTestServer(): Promise<TestContext> {
 			for (const [key, val] of Object.entries(req.headers)) {
 				if (typeof val === "string") headers[key] = val;
 			}
+			// Grant-based caching: header-less responses are never stored,
+			// so the Accept-share test's cache-hit assertion needs an explicit
+			// grant. An ETag alone won't do (no 304 here) — use max-age.
 			res.writeHead(200, {
 				"Content-Type": "application/json",
+				"Cache-Control": "max-age=300",
 			});
 			res.end(JSON.stringify({ headers }));
 			return;

@@ -250,6 +250,23 @@ function requestedUrls(): string[] {
 // ═══════════════════════════════════════════════════════════════════
 
 describe("/api verify — threshold + stamp", () => {
+	it("always fetches fresh — verify is never served from cache", async () => {
+		setupGuide(recipe([opBlock(OP_HEALTH), opBlock(OP_LIST)].join("\n")));
+		const ctx = mockCtx();
+		await handleVerifySubcommand("verify.test", ctx);
+
+		expect(notifyText(ctx)).toContain("stamped verified");
+		const calls = vi.mocked(fetchUrl).mock.calls;
+		expect(calls.length).toBeGreaterThan(0);
+		for (const call of calls) {
+			// Decision 4: verify's integrity — every transport call carries
+			// fresh: true, even though a warm cache entry could exist.
+			expect((call[1] as Record<string, unknown> | undefined)?.["fresh"]).toBe(
+				true,
+			);
+		}
+	});
+
 	it("stamps verified: today on all-pass and invalidates the cache", async () => {
 		setupGuide(recipe([opBlock(OP_HEALTH), opBlock(OP_LIST)].join("\n")));
 		const ctx = mockCtx();

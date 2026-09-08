@@ -54,7 +54,13 @@ beforeAll(async () => {
 			const k = url.pathname;
 			const n = (counts.get(k) ?? 0) + 1;
 			counts.set(k, n);
-			res.writeHead(200, { "Content-Type": "application/json" });
+			// Load-bearing: the non-auth control assertion reuses these URLs
+			// and expects the response to be cacheable — grant-based caching
+			// never caches a header-less response.
+			res.writeHead(200, {
+				"Content-Type": "application/json",
+				"Cache-Control": "max-age=60",
+			});
 			res.end(JSON.stringify({ count: n }));
 			return;
 		}

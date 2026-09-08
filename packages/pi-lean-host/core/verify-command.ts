@@ -269,6 +269,10 @@ export async function handleVerifySubcommand(
 			try {
 				outcome = await resolveOpForExecution(guide, op, dirName, {
 					userParams: run.params,
+					// Verify's whole point is a live check — never validate against
+					// a cached body. Auth-bearing ops never touch the cache anyway;
+					// this is belt-and-braces for no-auth guides.
+					fresh: true,
 				});
 			} catch (err) {
 				failed++;

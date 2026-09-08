@@ -85,6 +85,12 @@ export const apiFetchTool = defineTool({
 					"When true, paginate to gather all items up to the guide's gatherAllMax ceiling.",
 			}),
 		),
+		fresh: Type.Optional(
+			Type.Boolean({
+				description:
+					"When true, bypass the response cache and force a full network fetch. Responses are cached only when the server grants freshness (Cache-Control: max-age, or an ETag that revalidates via 304); pass fresh: true when you need guaranteed-current data (e.g. polling a status).",
+			}),
+		),
 	}),
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -96,21 +102,27 @@ export const apiFetchTool = defineTool({
 			gatherAll?: boolean;
 		};
 
-		// `gatherAll` may be passed at the tool's top level (the documented
-		// position) or nested inside `params` (the natural place, since `params`
-		// holds the operation arguments). Resolve both, preferring the top level,
-		// and strip `gatherAll` out of the forwarded params so it can't leak onto
-		// a `passthrough` query string or reach a domain helper. This must happen
-		// before `executeParams` is built below.
+		// `gatherAll` and `fresh` may be passed at the tool's top level (the
+		// documented positions) or nested inside `params` (the natural place,
+		// since `params` holds the operation arguments). Resolve both, preferring
+		// the top level, and strip both out of the forwarded params so they can't
+		// leak onto a `passthrough` query string or reach a domain helper. This
+		// must happen before `executeParams` is built below.
 		const rawParams = (params as Record<string, unknown>)["params"] as
 			| Record<string, unknown>
 			| undefined;
 		const gatherAll =
 			((params as Record<string, unknown>)["gatherAll"] as boolean | undefined) ??
 			(rawParams?.gatherAll as boolean | undefined);
+		const fresh =
+			((params as Record<string, unknown>)["fresh"] as boolean | undefined) ??
+			(rawParams?.fresh as boolean | undefined);
 		const userParams = rawParams ? { ...rawParams } : undefined;
 		if (userParams && "gatherAll" in userParams) {
 			delete userParams.gatherAll;
+		}
+		if (userParams && "fresh" in userParams) {
+			delete userParams.fresh;
 		}
 
 		// 1. Resolve guides by domain — a domain may be claimed by more than
@@ -183,6 +195,7 @@ export const apiFetchTool = defineTool({
 			const execOpts: ResolveOpOptions = { skipSsrfGuard: _bypassUrlSafety };
 			if (userParams) execOpts.userParams = userParams;
 			if (gatherAll !== undefined) execOpts.gatherAll = gatherAll;
+			if (fresh !== undefined) execOpts.fresh = fresh;
 			outcome = await resolveOpForExecution(guide, op, helperDirName, execOpts);
 		} catch (err) {
 			if (err instanceof HelperError) {
@@ -282,6 +295,8 @@ export const apiFetchTool = defineTool({
 				text += `\n⚠ gatherAll ignored — ${operation} is not paginated (via: restGet).`;
 			}
 			if (authFooter) text += `\n${authFooter}`;
+			if (r.cached === true)
+				text += `\n⏱ cache-served (hit or 304-validated) — pass fresh: true to force a full refetch`;
 			const staleNote = staleSchemaLine(guide);
 			if (staleNote) text += `\n${staleNote}`;
 			return {
@@ -292,6 +307,7 @@ export const apiFetchTool = defineTool({
 					shortName: guide.shortName,
 					via: "restGet",
 					request: { method: "GET", url: r.url, params: r.params },
+					...(r.cached === true ? { cached: true } : {}),
 					// Output-channel audit: drop response headers that echo a known
 					// secret value (an auth-bearing server must not leak the key).
 					headers: scrubSecretHeaders(r.headers, outcome.authOpts.secretValues),

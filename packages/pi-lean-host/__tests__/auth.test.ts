@@ -56,7 +56,13 @@ async function startAuthServer(): Promise<{
 		// probe is used so pre-existing module-level cache entries don't interfere.
 		if (url.pathname.startsWith("/api/cache/")) {
 			cacheHits += 1;
-			res.writeHead(200, { "Content-Type": "application/json" });
+			// Load-bearing: the non-auth control assertions in this file reuse
+			// these URLs and expect the response to be cacheable — grant-based
+			// caching never caches a header-less response.
+			res.writeHead(200, {
+				"Content-Type": "application/json",
+				"Cache-Control": "max-age=60",
+			});
 			res.end(JSON.stringify({ count: cacheHits }));
 			return;
 		}

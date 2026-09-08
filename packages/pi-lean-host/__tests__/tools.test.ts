@@ -46,12 +46,16 @@ import {
 interface TestCtx {
 	serverUrl: string;
 	stop: () => Promise<void>;
+	/** Hits per pathname — proves fresh bypasses the cache (network happened). */
+	requestCounts: Map<string, number>;
 }
 
 async function createApiTestServer(): Promise<TestCtx> {
+	const requestCounts = new Map<string, number>();
 	const handler = (req: IncomingMessage, res: ServerResponse) => {
 		const url = new URL(req.url ?? "/", "http://localhost");
 		const pathname = url.pathname;
+		requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1);
 
 		// GET /diario/{date} — searchDiary equivalent
 		if (pathname.startsWith("/diario/")) {
@@ -131,7 +135,7 @@ async function createApiTestServer(): Promise<TestCtx> {
 	};
 
 	const { url, stop } = await startTestServer(handler);
-	return { serverUrl: url, stop };
+	return { serverUrl: url, stop, requestCounts };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -645,6 +649,7 @@ function callFetch(
 		operation: string;
 		params?: Record<string, unknown>;
 		gatherAll?: boolean;
+		fresh?: boolean;
 	},
 	ctx?: any,
 ) {
@@ -1402,6 +1407,98 @@ describe("api-fetch", () => {
 		const details = result!.details as Record<string, unknown>;
 		const request = details.request as Record<string, unknown>;
 		expect(String(request.url)).not.toContain("gatherAll");
+		expect(String(request.url)).toContain("extra=x");
+	});
+
+	it("renders the cache footer and details.cached only on cache-served restGet results", async () => {
+		const date = "2030-01-01"; // unique URL — avoids the module-level cache of other tests
+
+		// Seed (fresh: true → network hit, no footer).
+		const seeded = await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date },
+			fresh: true,
+		});
+		const seededText = contentText(seeded);
+		expect(seededText).not.toContain("cache-served");
+		expect(
+			(seeded!.details as Record<string, unknown>)["cached"],
+		).toBeUndefined();
+
+		// Second call within TTL → cache-served: footer + details.cached.
+		const cached = await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date },
+		});
+		const cachedText = contentText(cached);
+		expect(cachedText).toContain("cache-served");
+		expect(cachedText).toContain("fresh: true");
+		expect((cached!.details as Record<string, unknown>)["cached"]).toBe(true);
+	});
+
+	it("paginate results never render the cache footer", async () => {
+		const result = await callFetch({
+			domain: "boe.es",
+			operation: "listConsolidada",
+			gatherAll: true,
+		});
+		expect(contentText(result)).not.toContain("cache-served");
+		expect(
+			(result!.details as Record<string, unknown>)["cached"],
+		).toBeUndefined();
+	});
+
+	it("fresh: true bypasses the cache (top-level and nested)", async () => {
+		const date = "2030-03-03"; // unique URL
+		const path = `/diario/${date}`;
+		const hits = () => ctx.requestCounts.get(path) ?? 0;
+
+		// Seed via top-level fresh (network hit).
+		await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date },
+			fresh: true,
+		});
+		const afterSeed = hits();
+
+		// Warm cache → served without a network hit.
+		await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date },
+		});
+		expect(hits()).toBe(afterSeed);
+
+		// Top-level fresh: true → new network request.
+		await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date },
+			fresh: true,
+		});
+		expect(hits()).toBe(afterSeed + 1);
+
+		// Nested fresh: true → also reaches the transport.
+		await callFetch({
+			domain: "boe.es",
+			operation: "searchDiary",
+			params: { date, fresh: true },
+		});
+		expect(hits()).toBe(afterSeed + 2);
+	});
+
+	it("nested fresh is stripped from a passthrough op's query string (A3)", async () => {
+		const result = await callFetch({
+			domain: "gather.example",
+			operation: "list",
+			params: { fresh: true, extra: "x" },
+		});
+		const details = result!.details as Record<string, unknown>;
+		const request = details.request as Record<string, unknown>;
+		expect(String(request.url)).not.toContain("fresh");
 		expect(String(request.url)).toContain("extra=x");
 	});
 

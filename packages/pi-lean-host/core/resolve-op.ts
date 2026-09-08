@@ -47,6 +47,11 @@ export interface ResolveOpOptions {
 	userParams?: Record<string, unknown>;
 	/** paginate: gather all items up to the guide's ceiling. */
 	gatherAll?: boolean;
+	/** Skip the transport cache read and suppress If-None-Match — force a
+	 *  full network fetch for this op (forwarded to both executors). Nothing
+	 *  sets it yet except `/api verify` (always fresh) and the api-fetch
+	 *  `fresh` param. */
+	fresh?: boolean;
 	/** paginate: bypass the nextLink SSRF guard (test hook only). */
 	skipSsrfGuard?: boolean;
 }
@@ -225,6 +230,7 @@ export async function resolveOpForExecution(
 			...authOpts,
 			transformFn: transformFn ?? undefined,
 			dirName: helperDirName,
+			...(opts?.fresh === undefined ? {} : { fresh: opts.fresh }),
 		});
 		return {
 			ok: true,
@@ -240,6 +246,7 @@ export async function resolveOpForExecution(
 			...authOpts,
 			...(opts?.skipSsrfGuard ? { skipSsrfGuard: true } : {}),
 			...(opts?.gatherAll === undefined ? {} : { gatherAll: opts.gatherAll }),
+			...(opts?.fresh === undefined ? {} : { fresh: opts.fresh }),
 			transformFn: transformFn ?? undefined,
 			dirName: helperDirName,
 		};

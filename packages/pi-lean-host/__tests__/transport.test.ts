@@ -21,6 +21,7 @@ import {
 	waitForRetry,
 	redactSecretParams,
 	fetchUrl,
+	_setClockForTest,
 } from "../core/transport.js";
 import { createServer, type Server } from "node:http";
 import { deflateSync, gzipSync } from "node:zlib";
@@ -145,6 +146,529 @@ describe("fetchUrl content-encoding handling", () => {
 			expect(JSON.parse(result.body)).toEqual({ ok: true });
 		} finally {
 			server.close();
+		}
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Grant-based caching — a body is served from cache only when the
+// server granted freshness: a time grant (Cache-Control: max-age) or a
+// validator grant (ETag → revalidate-only). No TTL is ever fabricated.
+// All expiry scenarios are driven by the module clock (_setClockForTest),
+// never by sleeping.
+// ═══════════════════════════════════════════════════════════════════
+
+interface ResponseSpec {
+	status: number;
+	headers?: Record<string, string>;
+	body?: string;
+	/** Hold the response before sending (lets a test interleave another
+	 *  fetchUrl call while this request is in flight). */
+	delayMs?: number;
+}
+
+/** Start a local server whose responses are computed per request index
+ *  (1-based). Tracks the number of network requests and every received
+ *  If-None-Match header (undefined when absent). */
+async function startCacheServer(
+	respond: (
+		n: number,
+		ifNoneMatch: string | undefined,
+		url: string | undefined,
+	) => ResponseSpec,
+): Promise<{
+	port: number;
+	requestCount: () => number;
+	ifNoneMatches: (string | undefined)[];
+	close: () => Promise<void>;
+}> {
+	let n = 0;
+	const ifNoneMatches: (string | undefined)[] = [];
+	const server = createServer(async (req, res) => {
+		n++;
+		ifNoneMatches.push(req.headers["if-none-match"]);
+		const spec = respond(n, req.headers["if-none-match"], req.url);
+		if (spec.delayMs) await new Promise((r) => setTimeout(r, spec.delayMs));
+		res.writeHead(spec.status, {
+			"content-type": "application/json",
+			...spec.headers,
+		});
+		res.end(spec.body ?? JSON.stringify({ n }));
+	});
+	const port = await listenAsync(server);
+	return {
+		port,
+		requestCount: () => n,
+		ifNoneMatches,
+		close: () =>
+			new Promise<void>((resolve, reject) =>
+				server.close((err) => (err ? reject(err) : resolve())),
+			),
+	};
+}
+
+/** Fixed test epoch so all clock math is deterministic. */
+const T0 = 1_700_000_000_000;
+
+function atClock(offsetMs: number): void {
+	_setClockForTest(() => T0 + offsetMs);
+}
+
+describe("grant-based caching", () => {
+	it("max-age: second call served from cache (zero network), third after TTL expiry hits network", async () => {
+		const srv = await startCacheServer((n) => ({
+			status: 200,
+			headers: { "cache-control": "max-age=10" },
+			body: JSON.stringify({ n }),
+		}));
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/max-age`;
+			const r1 = await fetchUrl(url);
+			expect(r1.cached).toBe(false);
+			const r2 = await fetchUrl(url);
+			expect(r2.cached).toBe(true);
+			expect(r2.body).toBe(r1.body);
+			expect(srv.requestCount()).toBe(1);
+			// TTL expiry → network again.
+			atClock(10_001);
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(false);
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("ETag without Cache-Control: never stale; 304 reuses body (cached), 200 replaces it", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"v1"') {
+				if (n === 2) return { status: 304, headers: { etag: '"v1"' } };
+				return {
+					status: 200,
+					headers: { etag: '"v2"' },
+					body: JSON.stringify({ n, changed: true }),
+				};
+			}
+			return { status: 200, headers: { etag: '"v1"' } };
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/etag-only`;
+			const r1 = await fetchUrl(url);
+			expect(r1.cached).toBe(false);
+			// Born-expired (no time grant): the hit branch never serves it, but
+			// the repeat is a conditional GET answered by a 304 → body reused.
+			const r2 = await fetchUrl(url);
+			expect(r2.cached).toBe(true);
+			expect(r2.body).toBe(r1.body);
+			expect(srv.requestCount()).toBe(2);
+			expect(srv.ifNoneMatches[1]).toBe('"v1"');
+			// Server sends a new body → 200 replaces cache (and the ETag).
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(false);
+			expect(JSON.parse(r3.body)).toEqual({ n: 3, changed: true });
+			expect(srv.ifNoneMatches[2]).toBe('"v1"');
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("no cache headers, no ETag: every call hits the network, nothing stored", async () => {
+		const srv = await startCacheServer((n) => ({
+			status: 200,
+			body: JSON.stringify({ n }),
+		}));
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/bare`;
+			const r1 = await fetchUrl(url);
+			const r2 = await fetchUrl(url);
+			const r3 = await fetchUrl(url);
+			expect(r1.cached).toBe(false);
+			expect(r2.cached).toBe(false);
+			expect(r3.cached).toBe(false);
+			expect(srv.requestCount()).toBe(3);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("no-store: never cached, never served — including no-store + ETag", async () => {
+		const srv = await startCacheServer(() => ({
+			status: 200,
+			headers: { "cache-control": "no-store", etag: '"keep"' },
+			body: JSON.stringify({ n: 1 }),
+		}));
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/no-store`;
+			const r1 = await fetchUrl(url);
+			const r2 = await fetchUrl(url);
+			expect(r1.cached).toBe(false);
+			expect(r2.cached).toBe(false);
+			// No If-None-Match on the repeat — nothing was stored to match from.
+			expect(srv.ifNoneMatches[1]).toBeUndefined();
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("no-cache + ETag: revalidate-only — every repeat is a conditional GET, 304 reuses body", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"nc"') return { status: 304 };
+			return {
+				status: 200,
+				headers: { "cache-control": "no-cache", etag: '"nc"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/no-cache-etag`;
+			const r1 = await fetchUrl(url);
+			expect(r1.cached).toBe(false);
+			const r2 = await fetchUrl(url);
+			expect(r2.cached).toBe(true);
+			expect(r2.body).toBe(r1.body);
+			expect(srv.requestCount()).toBe(2);
+			expect(srv.ifNoneMatches[1]).toBe('"nc"');
+			// Far past any conceivable TTL — still revalidate-only, never served
+			// from the hit branch without a round trip.
+			atClock(3_600_000);
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(true);
+			expect(srv.requestCount()).toBe(3);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it.each([
+		["max-age=0", { "cache-control": "max-age=0" }],
+		["bare no-cache", { "cache-control": "no-cache" }],
+		["no-cache, max-age>0", { "cache-control": "no-cache, max-age=300" }],
+	])(
+		"%s with no ETag: not stored — every repeat is a full refetch",
+		async (_name, cc) => {
+			const srv = await startCacheServer(() => ({
+				status: 200,
+				headers: cc,
+			}));
+			try {
+				atClock(0);
+				const url = `http://127.0.0.1:${srv.port}/dead`;
+				const r1 = await fetchUrl(url);
+				const r2 = await fetchUrl(url);
+				expect(r1.cached).toBe(false);
+				expect(r2.cached).toBe(false);
+				expect(srv.requestCount()).toBe(2);
+				expect(srv.ifNoneMatches[1]).toBeUndefined();
+			} finally {
+				_setClockForTest(() => Date.now());
+				await srv.close();
+			}
+		},
+	);
+
+	it("no-cache, max-age>0 + ETag: revalidate-only on every repeat (RFC 7234 §5.2.2.4)", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"ncx"') return { status: 304 };
+			return {
+				status: 200,
+				headers: { "cache-control": "no-cache, max-age=300", etag: '"ncx"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/no-cache-maxage-etag`;
+			await fetchUrl(url);
+			// Well within the declared max-age — must still revalidate.
+			atClock(1_000);
+			const r2 = await fetchUrl(url);
+			expect(r2.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+			expect(srv.ifNoneMatches[1]).toBe('"ncx"');
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("max-age + ETag expired: 304 refreshes TTL from the recorded grant (not revalidate-only)", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"v1"') return { status: 304 };
+			return {
+				status: 200,
+				headers: { "cache-control": "max-age=10", etag: '"v1"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/maxage-etag-expiry`;
+			await fetchUrl(url);
+			atClock(10_001); // past TTL
+			const r2 = await fetchUrl(url); // conditional GET → 304
+			expect(r2.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+			// The refreshed entry must carry the original max-age grant again —
+			// a repeat within the new TTL is served from the hit branch with
+			// zero network, proving the TTL was refreshed (not revalidate-only).
+			atClock(10_500);
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("304 carrying a new max-age upgrades the grant from its own header", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"up"')
+				return {
+					status: 304,
+					headers: { "cache-control": "max-age=100", etag: '"up"' },
+				};
+			return {
+				status: 200,
+				headers: { "cache-control": "max-age=10", etag: '"up"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/maxage-upgrade`;
+			await fetchUrl(url);
+			atClock(10_001); // original TTL expired
+			await fetchUrl(url); // conditional GET → 304 with max-age=100
+			expect(srv.requestCount()).toBe(2);
+			// Still served from the hit branch well past the original TTL —
+			// the 304's own max-age took over.
+			atClock(50_000);
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("304 carrying no-cache keeps the refreshed entry revalidate-only", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n === 2 && inm === '"nc304"')
+				return {
+					status: 304,
+					headers: { "cache-control": "no-cache, max-age=60" },
+				};
+			if (n > 2 && inm === '"nc304"') return { status: 304 }; // bare
+			return {
+				status: 200,
+				headers: { "cache-control": "max-age=10", etag: '"nc304"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/maxage-to-nocache`;
+			await fetchUrl(url);
+			atClock(10_001); // past TTL
+			const r2 = await fetchUrl(url); // conditional GET → 304 with no-cache
+			expect(r2.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+			// The no-cache arm applies to the 304's own headers: the entry stays
+			// born-expired → the next repeat is another conditional GET, never
+			// a header hit.
+			atClock(10_500);
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(true);
+			expect(srv.requestCount()).toBe(3);
+			expect(srv.ifNoneMatches[2]).toBe('"nc304"');
+			// The no-cache grant must stick: a later bare 304 falls back to the
+			// (now-updated) 0 grant, not the original store-time max-age —
+			// otherwise the entry would resurrect as a header hit.
+			atClock(11_000);
+			const r4 = await fetchUrl(url); // bare 304
+			expect(r4.cached).toBe(true);
+			expect(srv.requestCount()).toBe(4);
+			atClock(11_500);
+			const r5 = await fetchUrl(url);
+			expect(r5.cached).toBe(true);
+			expect(srv.requestCount()).toBe(5); // conditional GET, not a header hit
+			expect(srv.ifNoneMatches[4]).toBe('"nc304"');
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("304 carrying no-store deletes the entry instead of refreshing it", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"gone"')
+				return { status: 304, headers: { "cache-control": "no-store" } };
+			return {
+				status: 200,
+				headers: { "cache-control": "max-age=10", etag: '"gone"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/no-store-304`;
+			await fetchUrl(url);
+			atClock(10_001);
+			const r2 = await fetchUrl(url); // 304 + no-store → entry deleted
+			expect(r2.cached).toBe(true); // 304 still returns the stored body
+			expect(srv.requestCount()).toBe(2);
+			// Entry is gone: the next call is a plain full refetch.
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(false);
+			expect(srv.requestCount()).toBe(3);
+			expect(srv.ifNoneMatches[2]).toBeUndefined();
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("entry evicted while its conditional GET is in flight: the 304 still reuses the captured entry, no empty-body fall-through", async () => {
+		// While a revalidation is awaited, a concurrent caller's store can
+		// trigger evictCacheIfNeeded, whose sweep deletes the now-expired entry
+		// under revalidation. The 304 arm must use the entry reference captured
+		// at If-None-Match time — re-reading the map would fall through with an
+		// empty 304 body, which the 2xx store branch would store (poisoning the
+		// key with an empty body that later 304s would happily serve).
+		const targetInms: (string | undefined)[] = [];
+		const srv = await startCacheServer((_n, inm, url) => {
+			if (url?.endsWith("/race-target")) {
+				// The revalidated entry: first hit stores it (granted + ETag),
+				// the repeat is the conditional GET — held 200ms so the
+				// concurrent eviction fetch below completes while it's in flight.
+				targetInms.push(inm);
+				if (targetInms.length === 1)
+					return {
+						status: 200,
+						headers: { "cache-control": "max-age=60", etag: '"race"' },
+						body: JSON.stringify({ who: "target" }),
+					};
+				return { status: 304, delayMs: 200 };
+			}
+			// Cache fillers and the eviction catalyst: granted, no ETag.
+			return { status: 200, headers: { "cache-control": "max-age=60" } };
+		});
+		try {
+			atClock(0);
+			const base = `http://127.0.0.1:${srv.port}`;
+			for (let i = 0; i < 100; i++) await fetchUrl(`${base}/fill-${i}`);
+			const url = `${base}/race-target`;
+			await fetchUrl(url); // stores the granted + ETag entry (cache now at cap+1)
+			atClock(60_001); // expire everything without sweeping yet
+			// Revalidation starts: the If-None-Match read happens synchronously,
+			// then the conditional GET hangs in the server's 200ms delay.
+			const pending = fetchUrl(url);
+			// Concurrent granted fetch → evictCacheIfNeeded sweep deletes the
+			// expired entries (including the one under revalidation) while the
+			// 304 is still in flight.
+			await fetchUrl(`${base}/race-catalyst`);
+			const r = await pending;
+			// The captured entry is used: cached body served, grant refreshed.
+			expect(r.cached).toBe(true);
+			expect(r.status).toBe(200);
+			expect(r.body).toContain("target");
+			expect(targetInms[0]).toBeUndefined(); // first target hit: plain GET
+			expect(targetInms[1]).toBe('"race"'); // second: conditional GET
+			expect(srv.requestCount()).toBe(103);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("fresh: true skips the cache read and If-None-Match, but still stores a granted response (seed invariant)", async () => {
+		const srv = await startCacheServer((n, inm) => {
+			if (n > 1 && inm === '"seed"') return { status: 304 };
+			return {
+				status: 200,
+				headers: { "cache-control": "max-age=60", etag: '"seed"' },
+			};
+		});
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/fresh-seed`;
+			// Warm the cache, expire it, then fetch fresh — If-None-Match must
+			// be suppressed and the response still re-stored.
+			await fetchUrl(url, { fresh: true });
+			atClock(60_001);
+			const r2 = await fetchUrl(url, { fresh: true });
+			expect(r2.cached).toBe(false);
+			expect(srv.requestCount()).toBe(2);
+			expect(srv.ifNoneMatches[1]).toBeUndefined();
+			// Seeded: a non-fresh repeat is served from the cache header hit.
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(true);
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("auth-bearing request: no cache read and no cache write (pinned)", async () => {
+		const srv = await startCacheServer(() => ({
+			status: 200,
+			headers: { "cache-control": "max-age=60" },
+		}));
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/auth-private`;
+			const headers = { "x-api-key": "k1" };
+			const r1 = await fetchUrl(url, { headers });
+			const r2 = await fetchUrl(url, { headers });
+			expect(r1.cached).toBe(false);
+			expect(r2.cached).toBe(false);
+			// A key-less caller must not be served the keyed caller's response
+			// either — nothing was stored.
+			const r3 = await fetchUrl(url);
+			expect(r3.cached).toBe(false);
+			expect(srv.requestCount()).toBe(3);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
+		}
+	});
+
+	it("auth-bearing request: a protocol-violating spontaneous 304 is never served the cached body", async () => {
+		// If-None-Match is only sent when !hasAuth, so a compliant server can
+		// never 304 a keyed request — but one that does must not hand the keyed
+		// caller the body an earlier unauthenticated caller cached under the
+		// same key. The 304 arm is gated on !hasAuth like every cache arm.
+		const srv = await startCacheServer((n) =>
+			n === 1
+				? {
+						status: 200,
+						headers: { "cache-control": "max-age=60", etag: '"v1"' },
+						body: JSON.stringify({ public: true }),
+					}
+				: { status: 304 },
+		);
+		try {
+			atClock(0);
+			const url = `http://127.0.0.1:${srv.port}/auth-spontaneous-304`;
+			// Warm the cache with an unauthenticated caller.
+			await fetchUrl(url);
+			// Keyed caller gets a spontaneous 304 — must fall through, not be
+			// served the cached (unauthenticated) body.
+			const r2 = await fetchUrl(url, { headers: { "x-api-key": "k1" } });
+			expect(r2.cached).toBe(false);
+			expect(r2.body).not.toContain("public");
+			expect(srv.requestCount()).toBe(2);
+		} finally {
+			_setClockForTest(() => Date.now());
+			await srv.close();
 		}
 	});
 });

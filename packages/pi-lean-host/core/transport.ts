@@ -3,13 +3,31 @@
  *
  * Provides `fetchUrl()` with:
  *  - ETag-based conditional requests (304 → cached body)
- *  - Cache-Control `max-age` TTL
+ *  - Grant-based caching: a response is stored only when the server granted
+ *    freshness — a time grant (`Cache-Control: max-age`) or a validator grant
+ *    (an ETag → revalidate-only; the body is stored and every repeat is a
+ *    conditional GET, usually answered by a 304 with no body). No TTL is
+ *    ever fabricated for header-less responses.
  *  - Retry-on-429 with exponential backoff + `Retry-After` support
  *  - Configurable timeout
  *  - Automatic charset decoding from Content-Type
  *
  * Caching is per-URL, module-level (in-memory map). The cache is
  * transparent to callers; each URL is cached independently.
+ *
+ * Deliberately ignored cache directives (recorded so they aren't
+ * re-investigated):
+ *  - `Vary` — known limitation: the cache keys on URL + Accept + charset
+ *    only; pre-existing, not widened into a fix here.
+ *  - `s-maxage` — correctly ignored (private cache, RFC 7234 §1.3).
+ *  - `must-revalidate` / `stale-while-revalidate` / `stale-if-error` —
+ *    trivially satisfied: nothing is ever served stale.
+ *  - `Age` / `Date` skew — a granted entry is served for its full `max-age`
+ *    from store time even if `Age` says it arrived stale; pre-existing,
+ *    unchanged in severity.
+ *  - `Expires` — parsing deliberately not implemented (HTTP/1.0 legacy);
+ *    under grant-based caching an Expires-only server is either
+ *    revalidate-only (ETag present) or refetched every time (none).
  */
 
 import { request, Agent, interceptors, type Dispatcher } from "undici";
@@ -124,16 +142,33 @@ interface CacheEntry {
 	/** ETag for conditional requests; absent when the upstream didn't send one. */
 	etag?: string;
 	expiresAt: number;
+	/** The freshness grant (ms) currently in effect — stamped at store time
+	 *  and re-stamped on every 304 refresh. A bare 304 (no grant of its own)
+	 *  falls back to this value so a granted entry doesn't degrade to
+	 *  revalidate-only when the 304 carries no max-age; because it is
+	 *  re-stamped, a `no-cache` 304's 0 grant survives later bare 304s. */
+	grantMs: number;
 }
 
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_MAX_RETRIES = 2;
-const DEFAULT_TTL_MS = 60_000; // 60s fallback when no Cache-Control
 const MAX_CACHE_ENTRIES = 100; // ponytail: hard cap; evict soonest-expiring when exceeded
 const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB ceiling on a single response body
 
 /** Module-level cache: cache-key → CacheEntry. */
 const cache = new Map<string, CacheEntry>();
+
+/** Module clock — overridden by tests for sleep-free TTL-expiry scenarios.
+ *  Only the four cache-path call sites consult this (hit branch,
+ *  evictCacheIfNeeded, 2xx store, 304 refresh); retry/backoff/timeout paths
+ *  keep bare Date.now(). */
+let _now: () => number = Date.now;
+
+/** Test seam — swap the module clock used by the cache paths.
+ *  Same `_…ForTest` convention as guide-store.ts's `_resetLoadWarningsForTest`. */
+export function _setClockForTest(fn: () => number): void {
+	_now = fn;
+}
 
 /**
  * Drop expired entries, then — if still over the cap — evict the
@@ -141,7 +176,7 @@ const cache = new Map<string, CacheEntry>();
  */
 function evictCacheIfNeeded(): void {
 	if (cache.size < MAX_CACHE_ENTRIES) return;
-	const now = Date.now();
+	const now = _now();
 	for (const [k, e] of cache) {
 		if (e.expiresAt <= now) cache.delete(k);
 	}
@@ -330,6 +365,47 @@ function parseMaxAge(headers: Record<string, string>): number | null {
 	if (!cc) return null;
 	const m = cc.match(/max-age=(\d+)/i);
 	return m ? parseInt(m[1]!, 10) * 1000 : null;
+}
+
+/**
+ * Effective freshness grant for a response, in ms — computed ONCE per
+ * response; every cache consumer (store condition, entry expiry, 304
+ * refresh) reads this single derivation, nothing re-derives from raw
+ * headers.
+ *
+ *   no-cache  → 0  (revalidation required before reuse regardless of
+ *                  freshness, RFC 7234 §5.2.2.4 — even with max-age > 0)
+ *   otherwise → parseMaxAge(headers) ?? 0  (0 = no time grant; a
+ *                  revalidate-only entry is born expired)
+ *
+ * `no-store` is NOT detected here — the store/refresh sites check it
+ * explicitly, because a `no-store` response carrying an ETag (or max-age)
+ * would otherwise satisfy the grant formula and get stored.
+ */
+function effectiveGrant(headers: Record<string, string>): number | null {
+	const cc = headers["cache-control"];
+	if (cc && /no-cache/i.test(cc)) return 0;
+	return parseMaxAge(headers);
+}
+
+/**
+ * Cache-store condition for a 2xx response: cache the entry only when the
+ * response is not `no-store` AND (the effective grant is > 0 or an ETag
+ * exists). Pass the grant already derived by the caller — the same
+ * "compute once" rule the store/expiry/304 consumers follow.
+ * `grantMs > 0` — not raw `parseMaxAge` — excludes dead entries
+ * (`max-age=0` or `no-cache, max-age>0` with no ETag would be stored,
+ * never served, never 304-refreshable); `no-cache` is not excluded from
+ * storage outright because with an ETag it revalidates every use (RFC
+ * 7234), consistent with the `no-cache, max-age=0` + ETag pair
+ * (`parseMaxAge` returns 0, not null, for that pair).
+ */
+function shouldStore(
+	headers: Record<string, string>,
+	grantMs: number,
+): boolean {
+	if (/no-store/i.test(headers["cache-control"] ?? "")) return false;
+	return grantMs > 0 || !!headers["etag"];
 }
 
 /**
@@ -529,13 +605,22 @@ async function getWithGuardedRedirects(
 /**
  * Fetch a URL with caching and retry-on-429.
  *
- * Cache behaviour:
+ * Cache behaviour (grant-based — no TTL is ever fabricated):
  *  - URLs are cached in a module-level `Map<string, CacheEntry>`.
- *  - TTL from `Cache-Control: max-age=N` or the `DEFAULT_TTL_MS` fallback.
+ *  - A 2xx is stored only on an explicit server grant: a time grant
+ *    (`Cache-Control: max-age=N`) or a validator grant (an ETag — stored
+ *    with no stale window; every repeat sends `If-None-Match` and is
+ *    revalidate-only). `no-store` is never stored; `no-cache` never
+ *    serves from the fresh-hit branch (with an ETag it still revalidates).
  *  - When a cached entry has an `etag`, the conditional `If-None-Match`
- *    header is sent and a 304 refreshes the cached body's expiry.
+ *    header is sent; a 304 refreshes the entry's expiry from the 304's
+ *    own grant, falling back to the grant recorded at store time. A 304
+ *    carrying `no-store` deletes the entry instead of refreshing it.
+ *  - Header-less responses (no `Cache-Control`, no ETag) are never
+ *    cached — every call hits the network.
  *  - `opts.fresh = true` skips the cache read and bypasses sending
- *    `If-None-Match` (server returns full response).
+ *    `If-None-Match` (server returns full response); a granted response
+ *    fetched fresh is still stored (seeding the cache).
  *  - Requests carrying caller-specific headers (anything besides Accept,
  *    e.g. API keys) are never cached or served from cache — the response
  *    is private to that caller.
@@ -578,7 +663,7 @@ export async function fetchUrl(
 	const key = cacheKey(url, opts);
 	if (!opts?.fresh && !hasAuth) {
 		const entry = cache.get(key);
-		if (entry && Date.now() < entry.expiresAt) {
+		if (entry && _now() < entry.expiresAt) {
 			return { status: 200, headers: {}, body: entry.body, cached: true };
 		}
 	}
@@ -590,10 +675,18 @@ export async function fetchUrl(
 			"pi-lean-host/0.4.0 (+https://github.com/coreyryanhanson/pi-lean-dimension)";
 	}
 
+	// The entry being revalidated, captured at If-None-Match time. The 304
+	// arm reads this instead of re-fetching the map: a concurrent caller's
+	// evictCacheIfNeeded can delete the (expired) entry while the conditional
+	// GET is awaited, and re-reading would then find nothing and serve the
+	// 304's empty body as the response.
+	let revalidate: CacheEntry | undefined;
+
 	if (!opts?.fresh && !hasAuth) {
 		const entry = cache.get(key);
 		if (entry?.etag) {
 			reqHeaders["If-None-Match"] = entry.etag;
+			revalidate = entry;
 		}
 	}
 
@@ -627,13 +720,29 @@ export async function fetchUrl(
 				: await singleGet(url, reqHeaders, remaining, redirectAgent);
 
 			// ── 304 Not Modified ────────────────────────────────
-			if (status === 304) {
-				const entry = cache.get(key);
+			// Gated on !hasAuth like every other cache arm: a keyed request must
+			// never be served a body cached by an unauthenticated caller, even
+			// from a protocol-violating server that sends a spontaneous 304.
+			// Also gated on !fresh for the same reason: a fresh request must not
+			// receive a cached body, so an unsolicited 304 falls through to the
+			// status check instead.
+			if (status === 304 && !hasAuth && !opts?.fresh) {
+				const entry = revalidate ?? cache.get(key);
 				if (entry) {
-					const maxAge = parseMaxAge(respHeaders) ?? DEFAULT_TTL_MS;
-					entry.expiresAt = Date.now() + maxAge;
-					// 304 refreshes an existing key — no growth, but cap-check is cheap.
-					cache.set(key, entry);
+					if (/no-store/i.test(respHeaders["cache-control"] ?? "")) {
+						// A no-store revalidation result must not be stored.
+						cache.delete(key);
+					} else {
+						// Refresh from the 304's own effective grant; fall back to the
+						// grant currently recorded on the entry (a granted entry must
+						// not degrade to revalidate-only when the 304 carries no
+						// max-age), and re-stamp it so the newest grant sticks.
+						const grant304 = effectiveGrant(respHeaders) ?? entry.grantMs;
+						entry.grantMs = grant304;
+						entry.expiresAt = _now() + grant304;
+						// The entry object is mutated in place — cache.get returned the
+						// live reference, so no re-set is needed.
+					}
 					return {
 						status: 200,
 						headers: respHeaders,
@@ -662,13 +771,18 @@ export async function fetchUrl(
 			);
 
 			if (status >= 200 && status < 300 && !hasAuth) {
-				const maxAge = parseMaxAge(respHeaders) ?? DEFAULT_TTL_MS;
-				const etag = respHeaders["etag"];
-
-				const entry: CacheEntry = { body, expiresAt: Date.now() + maxAge };
-				if (etag) entry.etag = etag;
-				evictCacheIfNeeded();
-				cache.set(key, entry);
+				const grantMs = effectiveGrant(respHeaders) ?? 0;
+				if (shouldStore(respHeaders, grantMs)) {
+					const entry: CacheEntry = {
+						body,
+						expiresAt: _now() + grantMs,
+						grantMs,
+					};
+					const etag = respHeaders["etag"];
+					if (etag) entry.etag = etag;
+					evictCacheIfNeeded();
+					cache.set(key, entry);
+				}
 			}
 
 			return {

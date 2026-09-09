@@ -1126,7 +1126,7 @@ body
 			expect(err.fix).toContain("Remove required: true");
 		});
 
-		it("rejects a requiresAnyOf member that carries a default (mutually exclusive peers)", () => {
+		it("rejects a requiresAnyOf member that carries a default (at-least-one-of peers)", () => {
 			const raw = `---
 domains: [example.com]
 apiHost: https://api.example.com
@@ -1147,7 +1147,7 @@ body
 			expect(err.field).toBe("operations[0].requiresAnyOf.id");
 			expect(err.expected).toContain("not also declare a default");
 			expect(err.fix).toContain("Remove the default from params.id");
-			expect(err.fix).toContain("mutually exclusive peers");
+			expect(err.fix).toContain("at-least-one-of peers");
 		});
 	});
 

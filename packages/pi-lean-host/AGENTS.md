@@ -426,6 +426,9 @@ speculatively.
   headless `--code` completion, interactive inline prompt, --refresh), `query-secrets`
   (query-param-secret injection, output-channel redaction, api-probe inline
   auth / probe inline-auth `domain` override), `portal-projection`, `render-result`,
+  `pinned-idioms` (load-bearing parsing idioms pinned as contract: XML `@_`
+  attributes / `#text` / namespace-prefix stripping against a canonical Atom
+  sample, and the top-level-array `itemsPath: "$"` idiom),
   `response-spill`, `host-only-boundary`, `axis-units` (nextLink/XML/cursor/
   ETag/quoted-bracket-dotted-key/negative-index/numeric-coercion/hasMorePath
   via mocked transport; fixtures in `__tests__/fixtures/axis/`),
@@ -540,6 +543,37 @@ non-breaking, zero file-layout change, tokens re-mint on first use. Likeliest
 first consumer: a ROPC `/api login` (account-scoped tokens — a second user on
 one instance is a second same-grant slot). Per-op grant override stays out
 (an op needing a different grant belongs in a sibling guide).
+
+**Reserved-seam watch items (recognized-trigger discipline):** recognized
+shapes to act on with the named additive fix instead of re-deriving —
+all doc-only, none buildable speculatively:
+
+- **Request-derived credentials** (HMAC/SigV4/digest-signed GETs — Binance,
+  AWS, OAuth 1.0/HathiTrust-class): trigger = a caritas recipe targets a
+  signed GET. Lands as a new auth `kind` requiring auth resolution to see
+  method + final URL (`resolve-op.ts` step 3 must not entrench
+  auth-before-URL ordering further). Full seam note in
+  `core/api-guide-types.ts`.
+- **Link-header pagination** (GitHub/GitLab/Shopify `Link:` rel=next):
+  frozen shape = new `linkHeader` style + `linkRel?: string` through the
+  existing nextLink SSRF guard; never a magic value on `nextLinkPath`.
+  Seam note in `core/api-guide-types.ts`.
+- **Local-helper return contract**: the default export's return stays the
+  params record; richer pre-call control (headers, path) = new named
+  export (e.g. `buildRequest`), never reserved wrapper keys on the return
+  shape. Seam note in `core/local-helpers.ts`.
+- **`tokenBag` response-key ≠ request-param name**: trigger = a live API
+  where the token read key differs from the param it's echoed into. Fix is
+  the additive redesign of `continuationParams` into a map — a reshape of
+  the existing `string[]` would break.
+- **Per-op auth (`Operation.auth?`)**: trigger = a real mixed-auth need a
+  sibling-guide split + `optional` refs can't serve. Pure additive field;
+  never re-purpose `auth` into a map-of-profiles (`auths: {name: …}`).
+- **Optional path segments**: trigger = variable path depth without op
+  duplication. Additive escape `optionalPathParams?: string[]`; would
+  otherwise reshape `pathParams: string[]`.
+- **Per-op `host?` override** (regional hosts): additive; multi-recipe
+  domains + version-prefixed op `path` cover today's cases.
 
 **Bump rule (post-v1):** do not bump unless a guide that used to parse now
 fails to parse. Adding an optional field, a new enum value, or relaxing a

@@ -1657,7 +1657,9 @@ function validateOperation(
 	// member-exists, path-param reject, no `required: true` overlap, no
 	// `default` on a member. A group member that is `required` would defeat
 	// the group at runtime; a `default` would fire alongside a caller-supplied
-	// sibling (the members are mutually exclusive peers).
+	// sibling. Semantics are at-least-one-of with all supplied members sent
+	// (members may combine freely); multi-group lands only as the reserved
+	// `requiresAnyOfGroups` sibling key, never a union on this field.
 	const requiresAnyOfRaw = o["requiresAnyOf"];
 	let requiresAnyOf: string[] | undefined;
 	if (requiresAnyOfRaw !== undefined) {
@@ -1702,7 +1704,7 @@ function validateOperation(
 					"a param that is not also required: true",
 					`"${member}" is required: true`,
 					{
-						fix: `Remove required: true from params.${member} — it is governed by the requiresAnyOf group, not per-param required.`,
+						fix: `Remove required: true from params.${member} — it is governed by the requiresAnyOf at-least-one-of group, not per-param required.`,
 					},
 				);
 			}
@@ -1713,7 +1715,7 @@ function validateOperation(
 					"a param that does not also declare a default",
 					`"${member}" has a default`,
 					{
-						fix: `Remove the default from params.${member} — requiresAnyOf members are mutually exclusive peers, so a default would fire alongside a caller-supplied sibling.`,
+						fix: `Remove the default from params.${member} — requiresAnyOf members are at-least-one-of peers (all supplied members are sent), so a default would fire alongside a caller-supplied sibling.`,
 					},
 				);
 			}

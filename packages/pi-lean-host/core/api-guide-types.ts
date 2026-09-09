@@ -192,9 +192,43 @@ export interface OAuth2Auth {
 
 export type AuthConfig = NoneAuth | StaticKeyAuth | OAuth2Auth;
 
+// Reserved seam — request-derived credentials (HMAC / SigV4 / digest).
+// Binance SIGNED GETs, AWS SigV4, RFC 7616 digest, and OAuth 1.0 (e.g. the
+// HathiTrust Data API's HMAC-SHA1-signed read GETs) all require a credential
+// COMPUTED FROM a secret plus request context — provably inexpressible with
+// `SecretRef`, which is verbatim-plus-prefix only. When a real recipe
+// targets one, it lands as a new auth `kind` (or a `derive`-family field on
+// `SecretRef`) and will require auth resolution to see method + final URL;
+// `resolve-op.ts` step 3 must not assume auth is URL-independent, and must
+// not entrench the auth-before-URL ordering further. New enum values are
+// non-events under the bump rule, so waiting is free — do not build this
+// speculatively.
+
+// Reserved seam — OAuth2 slot key (`tokenKey?: string` on OAuth2Auth, NOT in
+// the schema). The slot key is (storeDomain, grant, tokenUrl); scopes and
+// clientId are deliberately excluded because same-issuer tokens are shared by
+// design. The accepted consequence: sibling guides on one domain with the
+// same grant + tokenUrl but different scopes/clientId collapse into one slot
+// (first mint wins; refresh never re-sends scopes). Trigger to add it: a bug
+// report of the form "wrong scope / sibling guide gets the other guide's
+// token" on one domain + same grant. The fix is then `tokenKey` (slot becomes
+// `<grant>__<hash>__<tokenKey>`) — additive, non-breaking, tokens re-mint on
+// first use. Do not re-litigate the slot-key design; see AGENTS.md.
+
 // ═══════════════════════════════════════════════════════════════════
 // Pagination
 // ═══════════════════════════════════════════════════════════════════
+
+// Reserved seam — Link-header pagination (GitHub/GitLab/Shopify: the next
+// page rides the `Link: <…>; rel="next"` response header; the body never
+// contains it). When it lands, the shape is: `PaginationStyle +=
+// "linkHeader"` plus a sibling field `linkRel?: string` (default "next"),
+// the resolved URL followed through the existing nextLink SSRF-guard path
+// (the URL is server-supplied from a header — equally attacker-controllable
+// — so the guard MUST key off the new style). Totals-in-header, if wanted,
+// is a separate additive `totalCountHeader?: string`. Never overload
+// `nextLinkPath` with magic values like "header:Link" — re-meaning an
+// existing field is a schema break.
 
 export type PaginationStyle =
 	| "offset-limit"
@@ -322,10 +356,15 @@ export interface Operation {
 	/**
 	 * At-least-one-of constraint: at least one of these param names must be
 	 * supplied. Members may not be `required: true` nor carry a `default`
-	 * (both parser-enforced) — they are mutually exclusive peers, so a
-	 * default would fire alongside a caller-supplied sibling and a
-	 * `required` flag would defeat the group. One group per op (v1); a
-	 * multi-group `requiresAnyOfGroups` upgrade is purely additive.
+	 * (both parser-enforced) — a default would fire alongside a
+	 * caller-supplied sibling and a `required` flag would defeat the group.
+	 * Semantics are at-least-one-of with all supplied members sent — members
+	 * may combine freely (Twitch `/helix/users` accepts `id` AND `login`
+	 * together); they are NOT mutually exclusive. One group per op (v1); a
+	 * multi-group upgrade lands only as a new sibling key
+	 * (`requiresAnyOfGroups?: string[][]`, AND semantics over groups, each
+	 * group at-least-one-of) — never as a union on this field, which would
+	 * re-mean it.
 	 */
 	requiresAnyOf?: string[];
 	/**
@@ -337,6 +376,13 @@ export interface Operation {
 	 * Whether this operation post-processes the parsed response with the
 	 * domain's local helper `transform` export (post-response). A `true`
 	 * value means call `<guidesDir>/<domain>/helper.ts`'s named `transform`.
+	 *
+	 * Frozen contract: on `via: paginate` the transform is PER-ITEM, by
+	 * documented contract in both executors and the escape-valve doc. A
+	 * whole-envelope transform (e.g. an OpenAlex `{meta, results}` page) must
+	 * land as a NEW field (`transformPage?: boolean`) — never by changing
+	 * what `transform` receives on paginate ops, which would be a
+	 * behavior-level re-meaning no published guide could take back cheaply.
 	 */
 	transform?: boolean;
 	/** Op-level responseShape override. */

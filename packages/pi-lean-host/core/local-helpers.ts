@@ -23,6 +23,13 @@
  * templating / query assembly.  It must be synchronous-pure or
  * fully-awaited — no background work (setTimeout/setInterval/process.on
  * callbacks escape as uncaughtException and cannot be caught here).
+ *
+ * Reserved seam — the return contract. The default export's return stays
+ * the params record. Richer pre-call control (request headers, path
+ * rewrite) must land as a NEW named export (e.g. `buildRequest`) or a new
+ * op field — never by overloading the return shape with reserved wrapper
+ * keys ({ params, headers, path }): a legitimate params record whose query
+ * params are literally named `params`/`headers`/`path` would be re-meaned.
  */
 
 import { join } from "node:path";

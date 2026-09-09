@@ -2406,23 +2406,14 @@ org guide.
 			expect(loaded.malformed[0]!.error.found).toBe("folder 'boe.es'");
 			expect(loaded.malformed[0]!.error.fix).toContain("mv");
 			expect(loaded.malformed[0]!.error.fix).toContain("boe");
-			// The per-guide fix names the mv only; the /reload instruction lives
-			// in the migration banner, not on each path line.
+			// The per-guide fix names the mv only; no /reload instruction on the
+			// fix line itself.
 			expect(loaded.malformed[0]!.error.fix).not.toContain("/reload");
 			// The malformed guide is warned about at load, and the catalog
-			// renders its actionable fix (the migration instruction).
+			// renders its actionable fix.
 			const msg = warn.mock.calls.map((c) => String(c[0])).join("\n");
 			expect(msg).toContain("Malformed guide");
 			expect(msg).toContain("boe.es");
-			// The one-shot migration banner carries the 0.4.0 structure-change
-			// explanation + /reload, and precedes the per-guide warnings.
-			expect(msg).toContain(
-				"pi-lean-host 0.4.0 changed the guide folder structure",
-			);
-			expect(msg).toContain("/reload");
-			expect(msg.indexOf("pi-lean-host 0.4.0 changed")).toBeLessThan(
-				msg.indexOf("Malformed guide"),
-			);
 			const catalog = formatApiGuideCatalog(loaded);
 			expect(catalog).toContain("fix:");
 			expect(catalog).not.toContain("/reload");
@@ -2437,21 +2428,17 @@ org guide.
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const notify = vi.fn();
 		try {
-			// Divergent folder (boe.es vs slug "boe") — the migration-window
-			// state that must surface loudly.
+			// Divergent folder (boe.es vs slug "boe") — must surface loudly.
 			mkdirSync(join(dir, "boe.es"), { recursive: true });
 			writeFileSync(join(dir, "boe.es", "guide.md"), BOE_RECIPE);
 
 			const loaded = loadApiGuidesFromDir(dir, notify);
 			expect(Object.keys(loaded.guides)).toEqual([]);
 			expect(loaded.malformed).toHaveLength(1);
-			// The banner + per-guide warning go through notify, not console.warn.
+			// The per-guide warning goes through notify, not console.warn.
 			expect(notify).toHaveBeenCalled();
 			expect(warn).not.toHaveBeenCalled();
 			const msgs = notify.mock.calls.map((c) => String(c[0])).join("\n");
-			expect(msgs).toContain(
-				"pi-lean-host 0.4.0 changed the guide folder structure",
-			);
 			expect(msgs).toContain("Malformed guide");
 			expect(msgs).toContain("boe.es");
 			// Every notify call uses the warning kind (ctx.ui.notify signature).
@@ -2462,43 +2449,12 @@ org guide.
 		}
 	});
 
-	it("warns on duplicate shortName across folders during the migration window", () => {
-		const dir = mkdtempSync(join(tmpdir(), "host-guides-"));
-		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-		try {
-			// Two divergent folders declaring the same shortName (migration-window
-			// collision). The duplicate warning names both; enforcement routes
-			// both to malformed (neither loads).
-			for (const f of ["alpha", "beta"]) {
-				mkdirSync(join(dir, f), { recursive: true });
-				writeFileSync(join(dir, f, "guide.md"), BOE_RECIPE);
-			}
-
-			const loaded = loadApiGuidesFromDir(dir);
-			expect(Object.keys(loaded.guides)).toEqual([]);
-			expect(loaded.malformed).toHaveLength(2);
-			const msg = warn.mock.calls.map((c) => String(c[0])).join("\n");
-			expect(msg).toContain("Duplicate shortName");
-			expect(msg).toContain("alpha");
-			expect(msg).toContain("beta");
-			expect(msg).toContain("/api delete");
-			// The migration banner fires once, not once per malformed guide.
-			expect(
-				msg.match(/pi-lean-host 0\.4\.0 changed the guide folder structure/g),
-			).toHaveLength(1);
-		} finally {
-			warn.mockRestore();
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	it("a divergent + convergent pair sharing shortName warns and loads only the convergent one", () => {
+	it("a divergent + convergent pair sharing shortName loads only the convergent one", () => {
 		const dir = mkdtempSync(join(tmpdir(), "host-guides-"));
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		try {
 			// Old divergent folder (pre-migration) + new convergent folder
-			// (slug). The duplicate warning names both; only the convergent one
-			// loads — the guarantee holds.
+			// (slug). Only the convergent one loads.
 			mkdirSync(join(dir, "boe.es"), { recursive: true });
 			writeFileSync(join(dir, "boe.es", "guide.md"), BOE_RECIPE);
 			mkdirSync(join(dir, "boe"), { recursive: true });
@@ -2507,10 +2463,6 @@ org guide.
 			const loaded = loadApiGuidesFromDir(dir);
 			expect(Object.keys(loaded.guides)).toEqual(["boe"]);
 			expect(loaded.malformed).toHaveLength(1);
-			const msg = warn.mock.calls.map((c) => String(c[0])).join("\n");
-			expect(msg).toContain("Duplicate shortName");
-			expect(msg).toContain("boe.es");
-			expect(msg).toContain("boe");
 		} finally {
 			warn.mockRestore();
 			rmSync(dir, { recursive: true, force: true });

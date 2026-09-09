@@ -42,12 +42,12 @@ export default function (pi: ExtensionAPI): void {
 	// session_start ensures registration even if host loads before portal.
 	pi.on("session_start", async (_event, ctx) => {
 		registerPortalProjection();
-		// Clear the guide-store cache so a folder rename made between sessions
-		// (the divergence check's "mv then /reload" migration) is picked up —
+		// Clear the guide-store cache so a folder rename (fixing the divergence
+		// check's "mv" instruction) made between sessions is picked up —
 		// regardless of whether pi re-evaluates the module or re-calls the entry
 		// function with persisted module-level state (the /resume path).
 		invalidateCache();
-		// Trigger a fresh scan with the UI notify channel so the migration
+		// Trigger a fresh scan with the UI notify channel so the schema-gate
 		// banner + per-guide warnings render through the Text component (wraps
 		// long lines, honors newlines) instead of raw console.warn (truncates
 		// + merges with the status bar). No-op on a warm cache; every later

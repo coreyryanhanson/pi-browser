@@ -33,7 +33,7 @@ let _cache: {
 	domainMap: Record<string, string[]>;
 } | null = null;
 
-// Load-time diagnostics (migration banner + per-guide malformed warnings) are
+// Load-time diagnostics (per-guide malformed warnings) are
 // a startup concern: emit them once per pi process on the first cold scan,
 // then suppress for the rest of the session so navigating chats or running
 // commands doesn't re-warn. A no-op notify (not `undefined`) is what

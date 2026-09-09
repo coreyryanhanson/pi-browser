@@ -97,17 +97,14 @@ describe("load-time warning suppression (once per process)", () => {
 		// Deterministic start regardless of prior tests in this file.
 		_resetLoadWarningsForTest();
 		// Divergent folder: shortName BOE slugs to "boe", folder is "boe.es" —
-		// the migration-window state that must warn exactly once at startup.
+		// malformed, so its per-guide warning must fire exactly once at startup.
 		setupGuide("boe.es", recipe("boe.es", "BOE"));
 		const notify = vi.fn();
 
-		// First cold scan (pi startup): the banner + per-guide warning fire.
+		// First cold scan (pi startup): the per-guide warning fires.
 		loadAllGuides(notify);
 		expect(notify).toHaveBeenCalled();
 		const msgs = notify.mock.calls.map((c) => String(c[0])).join("\n");
-		expect(msgs).toContain(
-			"pi-lean-host 0.4.0 changed the guide folder structure",
-		);
 		expect(msgs).toContain("Malformed guide");
 
 		// Later scans (navigating chats / running commands): suppressed.

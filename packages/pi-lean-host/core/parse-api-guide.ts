@@ -2538,8 +2538,7 @@ export function projectToGuide(guide: ApiGuide): Guide {
  * entry and the load-time warn, so every malformed guide — parse
  * failure, illegal shortName, divergent folder — surfaces the same signal
  * (and its actionable `fix` when present) instead of being silently
- * quarantined. Fires once per cached scan, same channel as the duplicate-
- * shortName check.
+ * quarantined. Fires once per cached scan.
  */
 function pushMalformed(
 	result: LoadedApiGuides,
@@ -2567,11 +2566,6 @@ export function loadApiGuidesFromDir(
 	} catch {
 		return result;
 	}
-	// Scan-local duplicate-shortName tracker (migration-window check only).
-	// shortName → the first folder that declared it, so the duplicate warning
-	// can name both folders. Not a field on LoadedApiGuides.
-	const seenShortNames = new Map<string, string>();
-
 	// Every load-time diagnostic routes through one channel: ctx.ui.notify
 	// when the caller has a UI context (renders via the Text component —
 	// wraps long lines, honors newlines), else console.warn. One fallback
@@ -2581,24 +2575,7 @@ export function loadApiGuidesFromDir(
 		else console.warn(msg);
 	};
 
-	// TODO(0.5.0): remove — migration banner for the 0.4.0 folder-structure
-	// change only. The permanent divergence + illegal-shortName checks below
-	// stay; only this prelude and the duplicate-shortName check are 0.5.0
-	// deletions. Fires once, immediately before the first identity warning, so
-	// it prepends the wall of migration warnings with the agent instructions.
-	let bannerEmitted = false;
-	const emitMigrationBanner = () => {
-		if (bannerEmitted) return;
-		bannerEmitted = true;
-		const msg =
-			`\n⚠ pi-lean-host 0.4.0 changed the guide folder structure: each guide must now live ` +
-			`in a folder named slug(shortName). Pass the warnings below to the ` +
-			`agent to fix them (rename the folder or set a valid shortName), then /reload.\n`;
-		warn(msg);
-	};
-
-	// One-time schema-gate banner (permanent, unlike the 0.4.0 migration
-	// banner): sets the "pass these to your agent" frame before the first
+	// One-time schema-gate banner: sets the "pass these to your agent" frame before the first
 	// stale-schema malformed warning. Fired only when the parse failure is a
 	// schemaVersion gate refusal, so ordinary malformed guides don't drag it
 	// in. The per-guide failure already names the file + migration doc in its
@@ -2641,14 +2618,11 @@ export function loadApiGuidesFromDir(
 			const guide = parsed.guide;
 			// Illegal-shortName + divergence checks (permanent). One try/catch
 			// owns the slug() call: a throw (empty or all-symbol shortName) is
-			// routed to malformed, never escaped. This wrapping lives in the
-			// permanent checks so the loader stays safe after the 0.5.0
-			// duplicate-check deletion.
+			// routed to malformed, never escaped.
 			let slugged: string;
 			try {
 				slugged = slug(guide.shortName);
 			} catch {
-				emitMigrationBanner();
 				pushMalformed(
 					result,
 					guidePath,
@@ -2663,27 +2637,11 @@ export function loadApiGuidesFromDir(
 				);
 				continue;
 			}
-			// TODO(0.5.0): remove — save-time slug() makes duplicate shortNames
-			// unreachable once all folders are migrated. Tracked on guides that
-			// pass the slug (before divergence routing) so the migration window —
-			// two divergent folders sharing a valid shortName — still surfaces a
-			// clear "delete one" warning instead of two opaque malformed entries.
-			const first = seenShortNames.get(guide.shortName);
-			if (first === undefined) {
-				seenShortNames.set(guide.shortName, entry);
-			} else {
-				emitMigrationBanner();
-				const dupMsg =
-					`⚠ Duplicate shortName '${guide.shortName}' in folders '${first}' and '${entry}'. ` +
-					`Delete one: /api delete <one>`;
-				warn(dupMsg);
-			}
 			// Divergence check (permanent) — ENFORCED, not advisory: the folder
 			// name must equal slug(shortName); the coupling IS the identity. A
 			// divergent guide routes to malformed (never loads), so the active
 			// set structurally holds at most one guide per shortName.
 			if (entry !== slugged) {
-				emitMigrationBanner();
 				pushMalformed(
 					result,
 					guidePath,

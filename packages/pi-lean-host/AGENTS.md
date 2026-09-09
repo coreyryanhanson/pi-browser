@@ -209,14 +209,14 @@ speculatively.
     group; no item dropped). Cannot inspect response headers.
   - **Local user helpers** (`core/local-helpers.ts`): a **pre-call** transform.
     User-authored `helper.ts` lives alongside its guide at
-    `~/.pi/agent/pi-lean-host/api-guides/<domain>/helper.ts`, loaded on demand
+    `~/.pi/agent/pi-lean-host/api-guides/<slug(shortName)>/helper.ts`, loaded on demand
     via dynamic `import()` when an op sets `helper: true`. It receives the
     agent-supplied params and returns the params the executor uses for URL
     templating / query assembly. One helper per domain is the v1 contract. A
     load failure or execution throw disables the helper for the rest of the
     session. See `api-helper-escape-valve.md` for the built-in vs local-helper
     classification.
-- **Guide folder identity (`slug(shortName)` — 0.4.0 breaking change)**: a
+- **Guide folder identity (`slug(shortName)`)**: a
   guide lives at `api-guides/<dirName>/guide.md` where **`dirName` must equal
   `slug(shortName)`**, never the routing `domain`. A divergent folder name — or
   an illegal/unslugable `shortName` (empty or all-symbol) — routes the guide to

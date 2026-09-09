@@ -42,6 +42,20 @@
   gesture, no agent tool surface). `/api oauth <domain> …` (init / mint /
   `--status` / `--refresh` / `--revoke` / `--code <code>` per token slot)
   manages OAuth2 tokens.
+- **`schemaVersion` hard gate** — a guide whose frontmatter `schemaVersion`
+  is older than the current schema (`GUIDE_SCHEMA_VERSION: 1`) **fails to
+  parse and routes to malformed**, replacing the previous non-blocking `⚠`
+  warning. Absent/malformed values fall to the floor `0` and fail too
+  (every guide must carry its vintage); forward-stamped guides (`> current`)
+  still parse. The refusal's `fix` names the on-disk path (or "this guide"),
+  the current version, and the shipped migration doc
+  (`docs/migration-v1.md` — the sole `docs/` exception in the npm `files`
+  array); `loadApiGuidesFromDir` emits a one-time banner before the first
+  stale-schema malformed warning. `api-learn` stamps the version
+  before validating (so hand-written recipes without the line still save)
+  and its starter skeleton carries `schemaVersion: 1`. Stale guides can't
+  be re-saved over — the upgrade path is the agent hand-fix loop the `fix`
+  message points at, or `/api delete` + re-author.
 - **Recipe schema and fixed executor** — `via: restGet|paginate` per
   operation; `responseShape.format: json|xml|text` with an IANA
   `charset` fallback (header charset always wins). Six pagination styles
@@ -72,9 +86,10 @@
   (non-empty string, tokenizeable, non-root, effective shape not `text`)
   so a typo'd path fails in front of the author instead of silently
   never firing. `schemaVersion` frontmatter
-  (stamped on save by `api-learn`) drives breaking-change detection: a
-  stale guide warns non-blockingly in `api-guide`/`api-fetch`, never
-  gating the load. v1 is **GET-read only** — no mutation helper.
+  (stamped on save by `api-learn`) is the vintage marker: a stale guide
+  (< current, including absent/malformed → floor `0`) fails to parse —
+  the hard gate (its own bullet above). pi-lean-host is **GET-read only** — no
+  mutation helper.
 - **`api-learn` + `api-probe` + `api-scaffold` authoring loop** — `api-learn`
   stages the working copy to `/tmp/pi-lean-host/<domain>/` for starter
   templates (`new: true`) or `/<slug(shortName)>/` for fetched recipes, and

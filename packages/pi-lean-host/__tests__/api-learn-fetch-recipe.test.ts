@@ -62,6 +62,7 @@ const API = "https://api.example.com";
 
 function recipe(domain: string, shortName: string, opName: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 shortName: ${shortName}
@@ -146,7 +147,7 @@ describe("api-learn fetch-recipe", () => {
 		for (const ex of [OAUTH2_CC_EXAMPLE, OAUTH2_AC_EXAMPLE]) {
 			// Dedent the 4-space manual indent to top-level YAML.
 			const auth = ex.replace(/^ {4}/gm, "");
-			const raw = `---\nkind: api\ndomains: [example.com]\napiHost: https://api.example.com\nshortName: ex\n${auth}\noperations:\n  - name: list\n    via: restGet\n    path: /items\n---\n`;
+			const raw = `---\nkind: api\nschemaVersion: 1\ndomains: [example.com]\napiHost: https://api.example.com\nshortName: ex\n${auth}\noperations:\n  - name: list\n    via: restGet\n    path: /items\n---\n`;
 			const res = parseApiGuide(raw, { filename: "example.com" });
 			if (!res.ok) {
 				throw new Error(
@@ -299,6 +300,40 @@ describe("api-learn save path (dir)", () => {
 			"utf-8",
 		);
 		expect(saved).toContain("getFull");
+	});
+
+	it("stale guide.md on disk → save refused (overwrite guard parses it first)", async () => {
+		// A pre-v1 guide fails the schemaVersion hard gate, so the overwrite
+		// guard sees it as unparseable and refuses — even for a same-shortName
+		// update. The only recovery is /api delete, never a re-save.
+		const dir = join(tmpGuidesDir, "stale-guard");
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(
+			join(dir, "guide.md"),
+			recipe("stale.example", "Stale Guard", "getOld").replace(
+				"schemaVersion: 1",
+				"schemaVersion: 0",
+			),
+			"utf-8",
+		);
+		const res = await saveRecipe(
+			"stale.example",
+			recipe("stale.example", "Stale Guard", "getNew"),
+		);
+		const text = contentText(res);
+		expect(text).toContain("Refusing to overwrite");
+		expect(text).toContain("NOT saved");
+		expect(text).toContain("won't parse");
+		expect(text).toContain("/api delete stale-guard");
+		expect(res.details).toMatchObject({
+			error: "overwrite_refused",
+			existing: null,
+			incoming: "Stale Guard",
+		});
+		// The stale guide is untouched on disk.
+		const onDisk = readFileSync(join(dir, "guide.md"), "utf-8");
+		expect(onDisk).toContain("getOld");
+		expect(onDisk).toMatch(/^schemaVersion: 0$/m);
 	});
 
 	it("empty / all-symbol shortName → save refused with prescriptive error before any write", async () => {

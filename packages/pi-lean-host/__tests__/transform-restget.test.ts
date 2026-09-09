@@ -51,6 +51,7 @@ function makeRecipe(transform?: boolean): string {
 	const transformLine =
 		transform === undefined ? "" : `    transform: ${transform}\n`;
 	return `---
+schemaVersion: 1
 kind: api
 domains: [fixture.test]
 icon: 📡

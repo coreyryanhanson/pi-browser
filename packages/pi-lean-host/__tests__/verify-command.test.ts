@@ -129,6 +129,7 @@ function recipe(
 ): string {
 	const auth = authBlock ?? "auth:\n  kind: none";
 	return `---
+schemaVersion: 1
 kind: api
 domains: [verify.test]
 icon: ✅

@@ -158,6 +158,7 @@ describe("/api secrets <domain> — assisted entry", () => {
 			writeFileSync(
 				join(guidesDir, "d-example", "guide.md"),
 				`---
+schemaVersion: 1
 domains: [d.example]
 apiHost: https://d.example
 auth:
@@ -202,6 +203,7 @@ body
 			writeFileSync(
 				join(guidesDir, "d-example", "guide.md"),
 				`---
+schemaVersion: 1
 domains: [d.example]
 apiHost: https://d.example
 auth:

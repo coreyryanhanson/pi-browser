@@ -20,10 +20,11 @@ import type { Guide } from "./guide-loader.js";
 export const GATHER_ALL_MAX_FALLBACK = 1000;
 
 /**
- * The schema version of the guide recipe format. Metadata-only attribution:
- * it is surfaced on the parsed guide but NEVER gates/warns/alters parse
- * (see __tests__/schema-version.test.ts). Absent frontmatter defaults to the
- * semantic 0. Bumped to 1 at the v1 auth-type reshape (0.5.0) — a breaking
+ * The schema version of the guide recipe format. Enforced by the hard gate:
+ * a guide whose schemaVersion is stale (< current) fails to parse and routes
+ * to malformed (see __tests__/schema-version.test.ts). Absent frontmatter
+ * defaults to the semantic 0, so an unversioned guide is treated as pre-v1
+ * and refused. Bumped to 1 at the v1 auth-type reshape (0.5.0) — a breaking
  * TS-type + YAML-shape change to `AuthConfig`, not a parse-behavior break.
  */
 export const GUIDE_SCHEMA_VERSION = 1 as const;
@@ -425,9 +426,10 @@ export interface Operation {
 export interface ApiGuide extends Guide {
 	kind: "api";
 	/**
-	 * Recipe schema version (attribution, not enforcement — see
-	 * GUIDE_SCHEMA_VERSION). Parsed from frontmatter `schemaVersion:`; absent
-	 * stays `undefined` (semantic default 0). Never gates/warns/alters parse.
+	 * Recipe schema version (enforced by the hard gate — see
+	 * GUIDE_SCHEMA_VERSION). Parsed from frontmatter `schemaVersion:`; an
+	 * absent/malformed value parses as the floor 0, which the gate refuses
+	 * as stale.
 	 */
 	schemaVersion?: number;
 	/** Execution root: scheme + host + base path; version prefix lives here. */

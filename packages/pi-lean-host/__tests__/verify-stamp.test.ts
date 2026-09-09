@@ -38,6 +38,7 @@ function recipe(verifiedLine?: string, body = "prose body"): string {
 		`kind: api`,
 		`# comment that must survive the stamp`,
 		`domains: [verify.test]`,
+		`schemaVersion: 1`,
 		`icon: ✅`,
 		`shortName: Verify`,
 		`apiHost: https://verify.test`,

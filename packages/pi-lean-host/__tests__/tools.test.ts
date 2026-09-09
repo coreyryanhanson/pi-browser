@@ -145,6 +145,7 @@ async function createApiTestServer(): Promise<TestCtx> {
 /** A valid recipe for the BOE-style test server. */
 function boeRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [boe.es, www.boe.es]
 icon: ⚖️
@@ -188,6 +189,7 @@ Guide prose.
 /** Recipe for a guide with param spec annotations. */
 function paramsRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [params.example]
 icon: 📋
@@ -227,6 +229,7 @@ Param spec test guide.
 
 function listStyleRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [liststyle.example]
 icon: 🏷️
@@ -255,6 +258,7 @@ listStyle render test guide.
 /** Recipe whose params carry `description` hints (format / semantics). */
 function descRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [desc.example]
 icon: 📝
@@ -304,6 +308,7 @@ Date format: all dates are YYYYMMDD. Use titulo: for title search.
 /** Recipe for a guide with op-level pagination but no guide-level pagination. */
 function pagedRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [paged.example]
 icon: 📄
@@ -343,6 +348,7 @@ Pagination test guide.
 /** Recipe for testing guide-level pagination fallback. */
 function pagFallbackRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [pagination-fallback.example]
 icon: 🔄
@@ -386,6 +392,7 @@ Pagination fallback test guide.
  * no-`pageSize` op must not render a fabricated size bit). */
 function cursorSizeRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [cursor-size.example]
 icon: 🎮
@@ -435,6 +442,7 @@ Cursor page-size render test guide.
  * leaked `gatherAll` would be visible on the query string) and a restGet op. */
 function gatherAllRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [gather.example]
 icon: 🧲
@@ -479,6 +487,7 @@ GatherAll robustness test guide.
 /** Two guides claiming the same domain (shared.example) — disambiguation fixtures. */
 function sharedRestRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [shared.example]
 organization: shared.org
@@ -517,6 +526,7 @@ Shared REST guide.
 
 function sharedActionRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [shared.example]
 organization: shared.org
@@ -559,6 +569,7 @@ Shared Action guide.
 /** One-op guide on opcollide.example whose single op is `fetchThing` — for the ambiguous-op test. */
 function opCollideRecipe(apiHost: string, shortName: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [opcollide.example]
 icon: 🔼
@@ -587,6 +598,7 @@ Op-collide guide.
 
 /** An invalid recipe (missing leading / in path). */
 const INVALID_RECIPE = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -919,6 +931,7 @@ describe("api-learn", () => {
 			await callLearn(
 				"authbad.example",
 				`---
+schemaVersion: 1
 domains: [authbad.example]
 apiHost: https://api.example.com
 auth:
@@ -941,6 +954,7 @@ operations:
 			await callLearn(
 				"viabad.example",
 				`---
+schemaVersion: 1
 domains: [viabad.example]
 apiHost: https://api.example.com
 operations:
@@ -1001,6 +1015,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		const longDesc = "x".repeat(201);
 		const recipe = `---
+schemaVersion: 1
 kind: api
 domains: [toolong.example]
 description: ${longDesc}
@@ -1027,6 +1042,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		const desc = "x".repeat(200);
 		const recipe = `---
+schemaVersion: 1
 kind: api
 domains: [boundary.example]
 description: ${desc}
@@ -1048,6 +1064,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		invalidateCache();
 		const first = `---
+schemaVersion: 1
 kind: api
 domains: [collide.example]
 organization: collide.org
@@ -1062,6 +1079,7 @@ operations:
 ---
 `;
 		const second = `---
+schemaVersion: 1
 kind: api
 domains: [collide.example]
 organization: collide.org
@@ -1094,6 +1112,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		invalidateCache();
 		const first = `---
+schemaVersion: 1
 kind: api
 domains: [nodesc.example]
 organization: nodesc.org
@@ -1108,6 +1127,7 @@ operations:
 ---
 `;
 		const second = `---
+schemaVersion: 1
 kind: api
 domains: [nodesc.example]
 organization: nodesc.org
@@ -1136,6 +1156,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		invalidateCache();
 		const first = `---
+schemaVersion: 1
 kind: api
 domains: [recover.example]
 organization: recover.org
@@ -1149,6 +1170,7 @@ operations:
 ---
 `;
 		const second = `---
+schemaVersion: 1
 kind: api
 domains: [recover.example]
 organization: recover.org
@@ -1176,6 +1198,7 @@ operations:
 		setUserGuidesDir(tmpGuidesDir);
 		invalidateCache();
 		const r1 = `---
+schemaVersion: 1
 kind: api
 domains: [solo.example]
 shortName: Solo
@@ -1236,7 +1259,7 @@ operations:
 		expect(raw).toContain("Prose body.");
 	});
 
-	it("replaces an explicit older schemaVersion on save", async () => {
+	it("replaces an explicit divergent schemaVersion on save", async () => {
 		setUserGuidesDir(tmpGuidesDir);
 		invalidateCache();
 		const recipe = `---\nkind: api\nschemaVersion: 5\ndomains: [stamp-replace.example]\nshortName: StampReplace\napiHost: ${ctx.serverUrl}\noperations:\n  - name: get\n    via: restGet\n    path: /x\n    accept: json\n---\n`;
@@ -1293,6 +1316,7 @@ operations:
 /** A recipe for the large-response endpoint (spill truncation). */
 function largeResponseRecipe(apiHost: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [large.example]
 icon: 📦
@@ -1360,20 +1384,6 @@ describe("api-fetch", () => {
 		expect(details.via).toBe("restGet");
 		expect(details.domain).toBe("boe.es");
 		expect(details.operation).toBe("searchDiary");
-	});
-
-	it("does not append a stale-schema note for a current guide", async () => {
-		// GUIDE_SCHEMA_VERSION is 0 during beta, so a freshly-saved guide is
-		// current — the staleness note must not appear on its fetch result
-		// (proves the api-fetch note wiring is active without a real bump).
-		const result = await callFetch({
-			domain: "boe.es",
-			operation: "searchDiary",
-			params: { date: "2026-07-17" },
-		});
-		const text = contentText(result);
-		expect(text).toContain("BOE");
-		expect(text).not.toContain("⚠ schemaVersion");
 	});
 
 	it("executes a paginate operation against the test server", async () => {
@@ -1835,9 +1845,12 @@ describe("api-fetch — path-secret guide (details-channel audit)", () => {
 		setSecretsDir(tmpSecrets);
 		writeSecret("path.example", "path_key", TOKEN);
 		// Same guide recipe as the save-summary test, but with apiHost pointed
-		// at the test server so the fetch is local.
+		// at the test server so the fetch is local. Stage into the canonical
+		// slug dir — the save-summary test's save re-staged its draft to
+		// slug(shortName)='pathkey', and its raw (unstamped) leftover would
+		// otherwise trip the divergent-dir guard on this re-save.
 		const recipe = `---\nkind: api\ndomains: [path.example]\nshortName: PathKey\napiHost: ${ctx.serverUrl}\nauth:\n  kind: static-key\n  secretPathRefs:\n    token:\n      secret: path_key\nresponseShape:\n  format: json\n  charset: utf-8\noperations:\n  - name: get\n    via: restGet\n    path: /auth{token}/get\n    accept: json\n---\n`;
-		contentText(await callLearn("path.example", recipe));
+		contentText(await callLearn("pathkey", recipe));
 		invalidateCache();
 
 		const res = await callFetch({ domain: "path.example", operation: "get" });

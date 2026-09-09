@@ -71,6 +71,7 @@
 		"tools/oauth-mint.ts",
 		"tools/api-probe.ts",
 		"tools/utils.ts",
+		"docs/migration-v1.md",
 		"README.md"
 	],
 	"pi": {

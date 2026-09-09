@@ -434,8 +434,8 @@ speculatively.
   via mocked transport; fixtures in `__tests__/fixtures/axis/`),
   `axis-coverage` (regression tripwire: the synthetic axis-guide set's union
   covers every guide-driven axis — removing an axis guide or dropping an
-  axis-exercising op fails it), `schema-version` (metadata-only guard on
-  `schemaVersion` frontmatter), `transform-{restget,paginate,render}`,
+  axis-exercising op fails it), `schema-version` (hard parse gate on `schemaVersion` —
+  stale/absent → malformed), `transform-{restget,paginate,render}`,
   `transport` (A3 Retry-After HTTP-date / exponential-backoff parsing +
   gzip/deflate response decompression — no recipe can reliably force a
   429, so the unit test is the proof — plus the grant-based cache suite:
@@ -506,14 +506,20 @@ disclaimer; host ships only the synthetic axis fixtures.
 
 `core/api-guide-types.ts` exports `GUIDE_SCHEMA_VERSION` (currently `1`).
 `schemaVersion` is **breaking-change detection**: `api-learn` stamps it
-on save (each guide records its authoring vintage), absent-on-read defaults
-to `0` (the floor, not current), and a stale guide (`schemaVersion <
-current`) gets a **non-blocking `⚠` warning** in the `api-guide` catalog /
-detail / disambiguation and a note on `api-fetch`. **Never a gate** — the
-guide always loads and runs (proved by `__tests__/schema-version.test.ts`).
-A hard-gate flip (stale → parse refusal) is the coordinated `0.5.0`
-decision, deferred until caritas re-stamps its corpus.
-<!-- schema-gate-flip: remove this whole marker + sentence once the hard gate lands -->
+on save (each guide records its authoring vintage — stamp-before-validate,
+so a hand-written recipe without the line still saves), absent-on-read
+defaults to `0` (the floor, not current), and a stale guide (`schemaVersion
+< current`, including absent/malformed → floor `0`) **fails to parse and
+routes to malformed** — a **hard gate** as of `0.5.0`, not a warning. The
+refusal's `fix` names the on-disk path (or "this guide" on bare parses),
+the current version, and the migration doc
+(`docs/migration-v1.md`, shipped in the npm tarball); the loader emits a
+one-time banner framing the stale-schema malformed warnings before the
+first one. Forward-stamped guides (`> current`) still parse. Proved by
+`__tests__/schema-version.test.ts`; the upgrade path is the agent hand-fix
+loop (re-stamp + apply the migration doc's breaking changes, then
+/reload) or `/api delete` + re-author — stale guides can't be re-saved
+over (the overwrite guard parses the existing file and refuses).
 
 **v1 (0.5.0) — the auth-type reshape:** `AuthConfig` became the
 `NoneAuth | StaticKeyAuth | OAuth2Auth` discriminated union with nested

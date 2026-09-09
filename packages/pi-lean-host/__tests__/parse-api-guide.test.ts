@@ -46,6 +46,7 @@ import {
 // ═══════════════════════════════════════════════════════════════════
 
 const BOE_RECIPE = `---
+schemaVersion: 1
 kind: api
 domains: [boe.es, www.boe.es]
 icon: ⚖️
@@ -128,6 +129,7 @@ function expectErr(
 
 // Minimal valid recipe — reused across multiple describe blocks.
 const MINIMAL = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -269,6 +271,7 @@ describe("parseApiGuide — cursor page size", () => {
 	// cursorParam value.
 	function cursorRecipe(pageSizeLines: string, cursorParam = "after"): string {
 		return `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -349,6 +352,7 @@ Prose.
 describe("parseApiGuide — docs field", () => {
 	it("accepts an http/https docs URL", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 docs: https://www.example.com/docs/api
@@ -369,6 +373,7 @@ operations:
 
 	it("rejects a non-string docs value", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 docs: 123
@@ -384,6 +389,7 @@ operations:
 
 	it("rejects a non-http(s) docs URL", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 docs: ftp://example.com/docs
@@ -406,6 +412,7 @@ operations:
 describe("parseApiGuide — organization & description", () => {
 	it("accepts organization and description", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 organization: example.org
 description: One-line API summary.
@@ -429,6 +436,7 @@ operations:
 
 	it("rejects a non-string organization", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 organization: 123
 apiHost: https://api.example.com/v1
@@ -444,6 +452,7 @@ operations:
 
 	it("rejects an empty organization", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 organization: ""
 apiHost: https://api.example.com/v1
@@ -459,6 +468,7 @@ operations:
 
 	it("rejects a non-string description", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 description: 123
 apiHost: https://api.example.com/v1
@@ -478,6 +488,7 @@ operations:
 		// double-quoted YAML scalar with a \n escape yields a real newline in
 		// the parsed value, which the parser rejects.
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 description: "first line\\nsecond line"
 apiHost: https://api.example.com/v1
@@ -498,6 +509,7 @@ operations:
 		// concern — a hand-edited longer description loads fine.
 		const long = "x".repeat(300);
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 description: ${long}
 apiHost: https://api.example.com/v1
@@ -519,6 +531,7 @@ operations:
 describe("parseApiGuide — malformed recipes", () => {
 	it("missing leading / in path → ParseError on operations[N].path", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -537,6 +550,7 @@ body
 
 	it("unknown via → ParseError on operations[N].via", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -554,6 +568,7 @@ body
 
 	it("unknown auth.kind → ParseError on auth.kind", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -573,6 +588,7 @@ body
 
 	it("missing auth.kind → ParseError with fix naming none | static-key", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -595,6 +611,7 @@ body
 
 	it("unknown auth key (name/secret wrong shape) → expected lists the known keys", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -617,6 +634,7 @@ body
 
 	it("unknown auth key (requiers:) → expected lists the known keys", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -639,6 +657,7 @@ body
 
 	it("paginate op with no pagination → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -655,6 +674,7 @@ body
 
 	it("paginate op rescued by top-level pagination", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 pagination:
@@ -677,6 +697,7 @@ body
 
 	it("missing apiHost → ParseError on apiHost", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 operations:
   - name: get
@@ -691,6 +712,7 @@ body
 
 	it("missing domains → ParseError on domains", () => {
 		const raw = `---
+schemaVersion: 1
 apiHost: https://api.example.com
 operations:
   - name: get
@@ -706,6 +728,7 @@ body
 
 	it("missing operations → ParseError on operations", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 ---
@@ -717,6 +740,7 @@ body
 
 	it("empty operations array → ParseError on operations", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations: []
@@ -730,6 +754,7 @@ body
 
 	it("path param with required/default in params → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -751,6 +776,7 @@ body
 
 	it("accepts a docs-only description on a path param token", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -773,6 +799,7 @@ body
 
 	it("accepts multiple path-param descriptions alongside query params", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -801,6 +828,7 @@ body
 
 	it("rejects a non-string path-param description", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -820,6 +848,7 @@ body
 
 	it("rejects a path param token carrying a non-description key", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -839,6 +868,7 @@ body
 
 	it("rejects a bare path param token (null spec)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -858,6 +888,7 @@ body
 
 	it("rejects an explicitly empty path-param mapping", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -877,6 +908,7 @@ body
 
 	it("captures param description hints", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -903,6 +935,7 @@ body
 
 	it("rejects a non-string param description", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -922,6 +955,7 @@ body
 
 	it("accepts passthrough: true on an operation", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -943,6 +977,7 @@ body
 
 	it("rejects a non-boolean passthrough", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -960,6 +995,7 @@ body
 
 	it("accepts transform: true on an operation", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -976,6 +1012,7 @@ body
 
 	it("rejects a non-boolean transform (string)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://example.com
 operations:
@@ -993,6 +1030,7 @@ body
 
 	it("rejects a non-boolean transform (number)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://example.com
 operations:
@@ -1016,6 +1054,7 @@ body
 	describe("parseApiGuide — requiresAnyOf", () => {
 		it("parses requiresAnyOf on an operation", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1045,6 +1084,7 @@ body
 
 		it("rejects an empty requiresAnyOf array", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1065,6 +1105,7 @@ body
 
 		it("rejects a requiresAnyOf member that is not a declared param", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1085,6 +1126,7 @@ body
 
 		it("rejects a requiresAnyOf member that is a path param", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1105,6 +1147,7 @@ body
 
 		it("rejects a requiresAnyOf member that is required: true", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1128,6 +1171,7 @@ body
 
 		it("rejects a requiresAnyOf member that carries a default (at-least-one-of peers)", () => {
 			const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1205,6 +1249,7 @@ body
 
 	it("invalid YAML → ParseError on frontmatter", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com
   bad: yaml: :
 ---
@@ -1217,6 +1262,7 @@ body
 
 	it("multiple backtick-leading plain scalars → all offending lines in one pass", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1237,13 +1283,14 @@ body
 		// Both offenders reported in the same error — not one per run.
 		// Line numbers are relative to the frontmatter block (the opening
 		// `---` is not part of `fm`), matching yamlParse's own reporting.
-		expect(err.found).toContain("line 9, column 22: `");
-		expect(err.found).toContain("line 11, column 22: `");
+		expect(err.found).toContain("line 10, column 22: `");
+		expect(err.found).toContain("line 12, column 22: `");
 		expect(err.fix).toContain("Quote the value");
 	});
 
 	it("backtick mid-value (not at start) → parses fine, no pre-scan hit", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1262,6 +1309,7 @@ body
 
 	it("backticks inside a folded block scalar (description: >) → not flagged", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1282,6 +1330,7 @@ body
 
 	it("quoted backtick value → not flagged (valid YAML)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1300,6 +1349,7 @@ body
 
 	it("apiHost without scheme → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: api.example.com/v1
 operations:
@@ -1316,6 +1366,7 @@ body
 
 	it("unknown pagination style → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 pagination:
@@ -1334,6 +1385,7 @@ body
 
 	it("offset-limit missing pageParam → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 pagination:
@@ -1353,6 +1405,7 @@ body
 
 	it("valid resumptionToken config parses", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1378,6 +1431,7 @@ body
 	// resumptionToken); absent → field is simply not set.
 	it("parses totalCountPath for an offset-limit pagination (any style)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1400,6 +1454,7 @@ body
 
 	it("parses totalCountPath without setting it when absent", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1423,6 +1478,7 @@ body
 	// projected when present, absent stays undefined, non-finite rejected.
 	it("parses base for an offset-limit pagination", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1445,6 +1501,7 @@ body
 
 	it("leaves base undefined when absent", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1466,6 +1523,7 @@ body
 
 	it("rejects a non-integer base", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1487,6 +1545,7 @@ body
 
 	it("rejects an empty totalCountPath", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1510,6 +1569,7 @@ body
 	// stays unset, empty rejected.
 	it("parses hasMorePath for an offset-limit pagination (any style)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1532,6 +1592,7 @@ body
 
 	it("parses hasMorePath without setting it when absent", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1553,6 +1614,7 @@ body
 
 	it("rejects an empty hasMorePath", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1574,6 +1636,7 @@ body
 
 	it("resumptionToken missing tokenParam → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1593,6 +1656,7 @@ body
 
 	it("resumptionToken missing tokenPath → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1612,6 +1676,7 @@ body
 
 	it("valid tokenBag config parses", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1638,6 +1703,7 @@ body
 
 	it("tokenBag missing continuationParams → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1656,6 +1722,7 @@ body
 
 	it("tokenBag with empty continuationParams → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 operations:
@@ -1779,6 +1846,7 @@ describe("parseApiGuide — pagination key allowlist", () => {
 
 	function guideWithPagination(paginationBlock: string): string {
 		return `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 ${paginationBlock}
@@ -1873,6 +1941,7 @@ body
 describe("parseApiGuide — dateParams", () => {
 	it("parses valid dateParams on an operation", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1897,6 +1966,7 @@ body
 
 	it("rejects an invalid date format string", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1915,6 +1985,7 @@ body
 
 	it("rejects dateParams when the value is not a mapping", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1932,6 +2003,7 @@ body
 
 	it("rejects listStyle on a param also named in dateParams (mutually exclusive)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1953,6 +2025,7 @@ body
 
 	it("rejects dateParams naming a path token (declared-but-dead)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -1976,6 +2049,7 @@ body
 
 	it("accepts operation without dateParams", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 operations:
@@ -2000,6 +2074,7 @@ body
 
 describe("parseApiGuide — errorPath", () => {
 	const base = (opBody: string, guideExtras = "") => `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 ${guideExtras}
@@ -2198,6 +2273,7 @@ describe("loadApiGuidesFromDir + formatApiGuideCatalog", () => {
 			writeFileSync(
 				join(brokenDir, "guide.md"),
 				`---
+schemaVersion: 1
 domains: [broken.com]
 apiHost: https://api.broken.com
 operations:
@@ -2229,6 +2305,7 @@ body
 		const dir = mkdtempSync(join(tmpdir(), "host-guides-"));
 		try {
 			const orgRecipe = (d: string, shortName: string, domains: string) => `---
+schemaVersion: 1
 kind: api
 domains: [${domains}]
 organization: archive.org
@@ -2516,6 +2593,17 @@ describe("stampFrontmatterField", () => {
 		);
 		expect(out).toBe("---\nfoo: bar\nschemaVersion: 1\n---\n");
 	});
+
+	it("replaces a valueless key line instead of duplicating it", () => {
+		// A bare `schemaVersion:` would otherwise survive the replace and
+		// collide with the appended stamp (duplicate YAML key).
+		const out = stampFrontmatterField(
+			"---\nfoo: bar\nschemaVersion:\n---\n",
+			"schemaVersion",
+			"1",
+		);
+		expect(out).toBe("---\nfoo: bar\nschemaVersion: 1\n---\n");
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2780,6 +2868,7 @@ describe("parseApiGuide — guide frontmatter allowlist (closed schema)", () => 
 describe("parseApiGuide — secretPathRefs", () => {
 	function guideWithOps(authYaml: string, opsYaml: string) {
 		return `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -2985,6 +3074,7 @@ body
 
 function listStyleGuide(opYaml: string, topPagination = ""): string {
 	return `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 ${topPagination}
@@ -3280,6 +3370,7 @@ describe("parseApiGuide — secretQueryRefs vs pagination wire names", () => {
 	// secret spreads last and overwrites the pagination value on every page
 	// request, so pagination silently never advances past page one.
 	const secretGuide = (opYaml: string, topPagination = "") => `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 auth:
@@ -3354,6 +3445,7 @@ Prose body.
 
 	it("oauth2 paramStyle: query injects access_token — colliding wire name → ParseError", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 auth:
@@ -3383,6 +3475,7 @@ Prose body.
 
 	it("oauth2 default paramStyle (bearer-header) with an access_token pageParam parses", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 auth:
@@ -3439,6 +3532,7 @@ describe("parseApiGuide — oauth2 query access_token vs op params", () => {
 
 	it("restGet op declaring params.access_token → ParseError (injected param is agent-suppliable collision)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 ${OAUTH2_QUERY_AUTH}operations:
@@ -3459,6 +3553,7 @@ Prose body.
 
 	it("bearer-header (default) with the same params.access_token stays legal", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 auth:
@@ -3483,6 +3578,7 @@ Prose body.
 
 	it("passthrough op with an undeclared caller-supplied access_token stays legal (runtime skips injected names)", () => {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v1
 ${OAUTH2_QUERY_AUTH}operations:

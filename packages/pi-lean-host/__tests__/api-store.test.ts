@@ -29,6 +29,7 @@ const mockTheme = {
 } as any;
 
 const STATIC_RECIPE = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com/v2/api
 auth:
@@ -48,6 +49,7 @@ operations:
 `;
 
 const GITHUB_OAUTH_RECIPE = `---
+schemaVersion: 1
 domains: [github.com]
 apiHost: https://api.github.com
 auth:
@@ -71,6 +73,7 @@ operations:
 `;
 
 const GITLAB_OAUTH_RECIPE = `---
+schemaVersion: 1
 domains: [gitlab.com]
 apiHost: https://gitlab.com/api/v4
 auth:

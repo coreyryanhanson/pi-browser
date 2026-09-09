@@ -155,6 +155,7 @@ function writeFixtureGuide(folder: string, shortName: string = folder): void {
 	writeFileSync(
 		join(domainDir, "guide.md"),
 		`---
+schemaVersion: 1
 kind: api
 domains: [${folder}.test]
 shortName: ${shortName}
@@ -180,6 +181,7 @@ function recipeWithHelper(
 	shortName: string = "Echo",
 ): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 icon: 📡
@@ -213,6 +215,7 @@ function recipeWithoutHelper(
 	domain: string = "echo.test",
 ): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 icon: 📡

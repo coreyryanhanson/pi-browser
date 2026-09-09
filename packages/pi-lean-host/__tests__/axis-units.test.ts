@@ -75,6 +75,7 @@ describe("framework axis AA — effective page size", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -146,6 +147,7 @@ describe("framework axis AB — pagination base seed", () => {
 		// `base: 1` seeds `start` at 1 without the double-declaration hack;
 		// no `params.start.default` needed. pageSize left to pagCfg (10).
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -208,6 +210,7 @@ describe("framework axis A — nextLink pagination", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [www.loc.gov]
 apiHost: https://www.loc.gov
@@ -271,6 +274,7 @@ describe("framework axis B — XML response parsing", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [dnb.de]
 apiHost: https://services.dnb.de
@@ -335,6 +339,7 @@ describe("framework axis C — cursor pagination", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [resources.data.gov]
 apiHost: https://api.gsa.gov
@@ -403,6 +408,7 @@ describe("framework axis C2 — cursor page-size seeding", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [twitch.example]
 apiHost: https://api.example
@@ -501,6 +507,7 @@ describe("framework axis D — ETag header on restGet", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains: [en.wikipedia.org]
 apiHost: https://en.wikipedia.org
@@ -557,6 +564,7 @@ describe("framework axis E — A1 single-record XML boxing", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains:
   - eutils.ncbi.nlm.nih.gov
@@ -625,6 +633,7 @@ describe("framework axis F — A2 namespaced XML prefix stripping", () => {
 		});
 
 		const parsed = parseApiGuide(`---
+schemaVersion: 1
 kind: api
 domains:
   - data-api.ecb.europa.eu
@@ -721,6 +730,7 @@ describe("framework axis G — quoted dotted keys + numeric cursors", () => {
 			});
 
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -779,6 +789,7 @@ operations:
 			});
 
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -813,6 +824,7 @@ operations:
 		const { paginate } = await import("../core/helpers.js");
 
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -852,6 +864,7 @@ operations:
 
 		await mockBody(JSON.stringify({ value: [{ id: 1 }], "@odata.nextLink": 42 }));
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -889,6 +902,7 @@ operations:
 			}),
 		);
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -934,6 +948,7 @@ operations:
 			});
 
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -972,6 +987,7 @@ operations:
 			}),
 		);
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -1043,6 +1059,7 @@ describe("framework axis H — hasMorePath boolean exhaustion", () => {
 	// exercises the derived-id cursor (data[-1].id) and the hasMorePath stop
 	// in one walk.
 	const STRIPE_GUIDE = `---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test
@@ -1205,6 +1222,7 @@ operations:
 	it("XML pin: lowercase <has_more>false</has_more> parses to real boolean false and stops", async () => {
 		const { paginate } = await import("../core/helpers.js");
 		const { guide, op } = await parseGuide(`---
+schemaVersion: 1
 kind: api
 domains: [api.test]
 apiHost: https://api.test

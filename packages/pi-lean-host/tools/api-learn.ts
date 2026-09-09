@@ -142,6 +142,7 @@ function placeholderSkeleton(domain: string): string {
 	return `---
 kind: api
 domains: [${domain}]
+schemaVersion: ${GUIDE_SCHEMA_VERSION}
 organization: <org>          # optional — org identity across guides (registrable domain)
 description: <one-line summary>  # optional — one-line summary; aids disambiguation
 icon: <emoji>
@@ -614,7 +615,17 @@ export const apiLearnTool = defineTool({
 			};
 		}
 
-		const parsed = parseApiGuide(recipe, { filename: domain });
+		// Stamp schemaVersion before validation: under the schemaVersion hard
+		// gate a recipe without a current stamp would fail validation before
+		// the stamp could land. Line-level frontmatter edit (comments + key
+		// order preserved); the write below persists the stamped text only on
+		// validation success.
+		const stamped = stampFrontmatterField(
+			recipe,
+			"schemaVersion",
+			String(GUIDE_SCHEMA_VERSION),
+		);
+		const parsed = parseApiGuide(stamped, { filename: domain });
 		if (!parsed.ok) {
 			const err = parsed.error;
 			const lines: string[] = [
@@ -689,7 +700,7 @@ export const apiLearnTool = defineTool({
 		if (divergent && existsSync(join(canonicalStaged, "guide.md"))) {
 			const existing = parseApiGuide(
 				readFileSync(join(canonicalStaged, "guide.md"), "utf-8"),
-				{ filename: slugged },
+				{ file: join(canonicalStaged, "guide.md"), filename: slugged },
 			);
 			const existingShort = existing.ok ? existing.guide.shortName : undefined;
 			if (existingShort !== parsed.guide.shortName) {
@@ -764,6 +775,7 @@ export const apiLearnTool = defineTool({
 		const filepath = join(domainDir, "guide.md");
 		if (existsSync(filepath)) {
 			const existing = parseApiGuide(readFileSync(filepath, "utf-8"), {
+				file: filepath,
 				filename: slugged,
 			});
 			const existingShort = existing.ok ? existing.guide.shortName : undefined;
@@ -938,15 +950,6 @@ export const apiLearnTool = defineTool({
 
 		// ── Write guide + mirror siblings ───────────────────────
 
-		// Stamp schemaVersion on save — each guide records the schema vintage
-		// it was authored against (the per-guide vintage that stale detection
-		// compares against). Line-level frontmatter edit; comments + key order
-		// preserved (no YAML round-trip).
-		const stamped = stampFrontmatterField(
-			recipe,
-			"schemaVersion",
-			String(GUIDE_SCHEMA_VERSION),
-		);
 		writeFileSync(filepath, stamped, "utf-8");
 
 		// Mirror the staged dir: present siblings overwrite the guides-dir

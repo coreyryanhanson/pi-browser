@@ -62,6 +62,7 @@ function recipe(
 	opts?: { helper?: boolean; transform?: boolean },
 ): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 shortName: ${shortName}

@@ -46,6 +46,14 @@ describe("publish manifest", () => {
 			expect(entry).not.toMatch(/^helpers\//);
 		}
 	});
+	it("migration-v1.md ships (the schema-gate `fix` message names it)", () => {
+		const raw = readFileSync(
+			new URL("../package.json", import.meta.url),
+			"utf-8",
+		);
+		const pkg = JSON.parse(raw) as { files?: string[] };
+		expect(pkg.files).toContain("docs/migration-v1.md");
+	});
 	it("axis guides ship their transform helper.ts alongside guide.md", () => {
 		// api-guides/ is GitHub-only (excluded from the npm tarball — see the
 		// negative assertions above), so the helper only needs to exist in the

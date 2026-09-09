@@ -112,6 +112,7 @@ function parseAuthQuery(
 	opsYaml = `  - name: get\n    via: restGet\n    path: /things\n    accept: json\n    params: {}\n`,
 ) {
 	const raw = `---
+schemaVersion: 1
 domains: [q.com]
 apiHost: https://api.q.com
 auth:

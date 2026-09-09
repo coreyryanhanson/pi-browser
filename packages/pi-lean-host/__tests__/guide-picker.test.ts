@@ -66,12 +66,6 @@ describe("buildGuidePickerItems", () => {
 		]);
 		expect(items[0]).toEqual({ value: "empty", label: "Empty" });
 	});
-
-	it("flags a stale guide with a ⚠ on its label", () => {
-		const stale = guide({ shortName: "Old", schemaVersion: 0 });
-		const items = buildGuidePickerItems([{ guide: stale, dirName: "old" }], 1);
-		expect(items[0]!.label).toBe("Old ⚠");
-	});
 });
 
 describe("pickGuide", () => {

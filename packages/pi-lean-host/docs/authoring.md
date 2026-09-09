@@ -99,7 +99,7 @@ and copy a domain folder that matches your target.
 | `description` | guide | — | optional one-line summary (≤200 chars); primary disambiguation signal for multi-guide domains |
 | `docs` | guide | — | optional canonical API documentation URL (http/https); surfaced in api-guide detail |
 | `verified` | guide | creation date | drift signal — **defaulted, not enforced**; stamped on success by `/api verify` |
-| `schemaVersion` | guide | `0` (floor) | breaking-change detection — stamped on save by `api-learn`; a stale guide (`< current`) gets a non-blocking `⚠` warning in `api-guide`/`api-fetch`, **never a gate** |
+| `schemaVersion` | guide | — (absent fails) | breaking-change detection — stamped on save by `api-learn`; **hard gate**: absent/malformed falls to the floor `0` and a stale guide (`< current`) **fails to parse** with a `fix` naming the migration doc (see `docs/migration-v1.md`) |
 | `gatherAllMax` | guide / op | `1000` | `gatherAll` ceiling; an op can override |
 | `auth.kind` | guide | `none` | `none` \| `static-key` (store-backed header/query secrets) \| `oauth2` (client_credentials + authorization_code token flows) |
 | `auth.headers` | guide | — | literal extra headers merged into every request (e.g. X-Api-Key: DEMO_KEY) — **literal values only**, never the path for real credentials |

@@ -11,30 +11,26 @@
  *
  * Terminal-only: `ctx.mode === "tui"` (custom components don't exist in
  * RPC/print). In headless/RPC/print `pickGuide` returns undefined and the
- * caller keeps today's text menu + retype fallback. A stale guide
- * (`schemaVersion < current`) gets a `⚠` on its label so stale-guide
- * detection survives the interactive path.
+ * caller keeps today's text menu + retype fallback.
  */
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SelectItem } from "@earendil-works/pi-tui";
-import { GUIDE_SCHEMA_VERSION, type ApiGuide } from "./api-guide-types.js";
+import type { ApiGuide } from "./api-guide-types.js";
 import {
 	formatGuideListings,
-	isStaleSchema,
 	selectGuideByShortName,
 	shortNameErrorText,
 } from "./parse-api-guide.js";
 import { pickWithDescription } from "./select-picker.js";
 
 /**
- * Build the picker rows: `value` = dirName (unique), `label` = shortName (with
- * a `⚠` when stale), `description` = the guide description, falling back to an
- * op-count summary when absent. Pure — tests exercise it without a TUI.
+ * Build the picker rows: `value` = dirName (unique), `label` = shortName,
+ * `description` = the guide description, falling back to an op-count summary
+ * when absent. Pure — tests exercise it without a TUI.
  */
 export function buildGuidePickerItems(
 	matches: { guide: ApiGuide; dirName: string }[],
-	current: number = GUIDE_SCHEMA_VERSION,
 ): SelectItem[] {
 	return matches.map(({ guide, dirName }) => {
 		const desc =
@@ -44,9 +40,7 @@ export function buildGuidePickerItems(
 				: undefined);
 		const item: SelectItem = {
 			value: dirName,
-			label:
-				guide.shortName +
-				(isStaleSchema(guide.schemaVersion ?? 0, current) ? " ⚠" : ""),
+			label: guide.shortName,
 		};
 		if (desc !== undefined) item.description = desc;
 		return item;

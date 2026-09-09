@@ -30,10 +30,7 @@ import {
 } from "../core/resolve-op.js";
 import { canonicalStoreDomain, containsSecret } from "../core/auth.js";
 import { provisionedDomainsSuffix } from "../core/secrets-store.js";
-import {
-	formatGuideListings,
-	staleSchemaLine,
-} from "../core/parse-api-guide.js";
+import { formatGuideListings } from "../core/parse-api-guide.js";
 import { spillResponse, formatSpillNotice } from "../core/response-spill.js";
 import { appendFooter, contentText } from "./utils.js";
 import type { Operation, ApiGuide } from "../core/api-guide-types.js";
@@ -297,8 +294,6 @@ export const apiFetchTool = defineTool({
 			if (authFooter) text += `\n${authFooter}`;
 			if (r.cached === true)
 				text += `\n⏱ cache-served (hit or 304-validated) — pass fresh: true to force a full refetch`;
-			const staleNote = staleSchemaLine(guide);
-			if (staleNote) text += `\n${staleNote}`;
 			return {
 				content: [{ type: "text", text }],
 				details: {
@@ -338,8 +333,6 @@ export const apiFetchTool = defineTool({
 							r.failedItems,
 						);
 			if (authFooter) text += `\n${authFooter}`;
-			const staleNote = staleSchemaLine(guide);
-			if (staleNote) text += `\n${staleNote}`;
 			return {
 				content: [{ type: "text", text }],
 				details: {

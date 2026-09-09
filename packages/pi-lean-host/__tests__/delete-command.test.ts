@@ -38,6 +38,7 @@ import { handleDeleteSubcommand } from "../core/delete-command.js";
 
 function recipe(domain: string, shortName: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 icon: ✅

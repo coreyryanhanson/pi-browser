@@ -37,6 +37,7 @@ function withFixtureGuide(fn: () => void): void {
 		join(guidesDir, "boe-test", "guide.md"),
 		[
 			"---",
+			"schemaVersion: 1",
 			"shortName: BOE Test",
 			"domains:",
 			"  - boe.es",

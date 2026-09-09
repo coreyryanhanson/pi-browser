@@ -182,6 +182,7 @@ function authRecipe(
 		: `    x-api-key:
       secret: api_key`;
 	return `---
+schemaVersion: 1
 domains: [${domain}]
 apiHost: ${serverUrl}
 auth:
@@ -256,6 +257,7 @@ function writeGuideForDomain(domain: string, yaml: string): void {
 describe("auth schema / parser", () => {
 	function parseAuthBlock(authYaml: string) {
 		const raw = `---
+schemaVersion: 1
 domains: [example.com]
 apiHost: https://api.example.com
 auth:
@@ -978,6 +980,7 @@ describe("api-fetch authenticated execution", () => {
 		writeGuideForDomain(
 			"auth.prefix",
 			`---
+schemaVersion: 1
 domains: [auth.prefix]
 apiHost: ${server.url}
 auth:
@@ -1039,6 +1042,7 @@ body
 		writeGuideForDomain(
 			"flipped",
 			`---
+schemaVersion: 1
 domains: [github.com, api.github.com]
 apiHost: ${server.url}
 auth:
@@ -1084,6 +1088,7 @@ body
 		writeGuideForDomain(
 			"flipped-missing",
 			`---
+schemaVersion: 1
 domains: [gbif.org, api.gbif.org]
 apiHost: ${server.url}
 auth:

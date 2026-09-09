@@ -88,6 +88,7 @@ const API = "https://api.example.com";
 /** A 3-op guide: two ops with unsatisfiable params + one fully-runnable. */
 function mixedRecipe(domain: string, shortName: string): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 shortName: ${shortName}
@@ -138,6 +139,7 @@ function tokenRecipe(
 	opName: string,
 ): string {
 	return `---
+schemaVersion: 1
 kind: api
 domains: [${domain}]
 shortName: ${shortName}
@@ -285,6 +287,7 @@ describe("api-scaffold", () => {
 			"Runnable",
 			"runnable.example",
 			`---
+schemaVersion: 1
 kind: api
 domains: [runnable.example]
 shortName: Runnable
@@ -493,6 +496,7 @@ describe("api-scaffold TUI rendering", () => {
 describe("api-scaffold — secretPathRefs sentinels", () => {
 	it("stages no sentinel for a secret-owned path token; caller-supplied tokens still get one", async () => {
 		const recipe = `---
+schemaVersion: 1
 kind: api
 domains: [path.example]
 shortName: PathKey

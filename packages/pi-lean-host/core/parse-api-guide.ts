@@ -11,6 +11,7 @@
 import { parse as yamlParse } from "yaml";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Guide } from "./guide-loader.js";
 import {
 	extractPathTokens,
@@ -80,8 +81,7 @@ export function stampFrontmatterField(
 	const content = match[2] ?? "";
 	const nl = /^---(\r?\n)/.exec(raw)?.[1] ?? "\n";
 	const lines = fm.split(nl);
-	const keyRe = new RegExp(`^${key}:\\s*.+$`);
-	const idx = lines.findIndex((l) => keyRe.test(l));
+	const idx = lines.findIndex((l) => l.startsWith(`${key}:`));
 	const line = `${key}: ${value}`;
 	if (idx === -1) {
 		// Insert-only separation: a new key would land flush against the
@@ -284,6 +284,11 @@ export const GUIDE_ALLOWLIST: ReadonlySet<string> = new Set([
 // ═══════════════════════════════════════════════════════════════════
 // Error helper
 // ═══════════════════════════════════════════════════════════════════
+
+// The migration doc for the current schema bump, resolved from this module's
+// own location so no hardcoded install path is ever rendered — the doc ships
+// in the npm tarball (enforced by ship-manifest.test.ts).
+const MIGRATION_DOC_NOTE = `See the migration guide for this schema bump: ${fileURLToPath(new URL("../docs/migration-v1.md", import.meta.url))}.`;
 
 function fail(
 	file: string | undefined,
@@ -2260,14 +2265,13 @@ export function parseApiGuide(
 		description = descriptionRaw;
 	}
 
-	// schemaVersion — breaking-change detection (design: "schemaVersion is
-	// detection, not enforcement"). Stamped on save by api-learn; absent-on-
-	// read defaults to 0 (the floor), so an unversioned guide flags as
-	// potentially stale after any schema bump rather than silently inheriting
-	// the new current. A valid-integer frontmatter value overrides the floor.
-	// A stale value (< current) warns non-blockingly in the api-guide catalog/
-	// detail and on api-fetch; never gates. A malformed (non-integer/negative)
-	// value falls back to 0 and never rejects a guide.
+	// schemaVersion — breaking-change detection, enforced by the hard gate.
+	// Stamped on save by api-learn; absent-on-read defaults to 0 (the floor),
+	// so an unversioned guide is treated as pre-v1. A valid-integer frontmatter
+	// value overrides the floor. A stale value (< current) fails to parse and
+	// routes to malformed (the gate below). A malformed (non-integer/negative)
+	// value also falls to the floor 0 and is caught by the same gate — one
+	// code path, one message.
 	let schemaVersion = 0;
 	const schemaVersionRaw = m["schemaVersion"];
 	if (
@@ -2276,6 +2280,20 @@ export function parseApiGuide(
 		schemaVersionRaw >= 0
 	) {
 		schemaVersion = schemaVersionRaw;
+	}
+	if (isStaleSchema(schemaVersion, GUIDE_SCHEMA_VERSION)) {
+		return fail(
+			file,
+			"schemaVersion",
+			`>= ${GUIDE_SCHEMA_VERSION} (current)`,
+			describeFound(schemaVersionRaw),
+			{
+				fix:
+					`Guide ${file ?? "this guide"} was authored against schema ${schemaVersion}; the current schema is ${GUIDE_SCHEMA_VERSION}. ` +
+					`Re-stamp its frontmatter to schemaVersion: ${GUIDE_SCHEMA_VERSION}, hand-fixing any breaking changes listed in the migration doc. ${MIGRATION_DOC_NOTE} ` +
+					`Ask your agent to make this fix, then /reload.`,
+			},
+		);
 	}
 
 	let gatherAllMax = GATHER_ALL_MAX_FALLBACK;
@@ -2578,6 +2596,23 @@ export function loadApiGuidesFromDir(
 			`agent to fix them (rename the folder or set a valid shortName), then /reload.\n`;
 		warn(msg);
 	};
+
+	// One-time schema-gate banner (permanent, unlike the 0.4.0 migration
+	// banner): sets the "pass these to your agent" frame before the first
+	// stale-schema malformed warning. Fired only when the parse failure is a
+	// schemaVersion gate refusal, so ordinary malformed guides don't drag it
+	// in. The per-guide failure already names the file + migration doc in its
+	// fix; the banner only sets the frame once per scan.
+	let schemaBannerEmitted = false;
+	const emitSchemaGateBanner = () => {
+		if (schemaBannerEmitted) return;
+		schemaBannerEmitted = true;
+		warn(
+			`\n⚠ One or more guides were authored against an older guide schema and failed to load. ` +
+				`Pass the warnings below to the agent to fix them ` +
+				`(re-stamp schemaVersion + apply the breaking changes in the migration doc), then /reload.\n`,
+		);
+	};
 	for (const entry of entries) {
 		const entryPath = join(dir, entry);
 		try {
@@ -2665,6 +2700,7 @@ export function loadApiGuidesFromDir(
 			}
 			result.guides[entry] = guide;
 		} else {
+			if (parsed.error.field === "schemaVersion") emitSchemaGateBanner();
 			pushMalformed(result, guidePath, name, parsed.error, warn);
 		}
 	}
@@ -2672,7 +2708,7 @@ export function loadApiGuidesFromDir(
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Schema-version staleness — detection, never a gate
+// Schema-version staleness — the hard gate's predicate
 // ════════════════════════════════════════════════════════════════════
 
 /**
@@ -2685,21 +2721,6 @@ export function isStaleSchema(
 	currentSchemaVersion: number,
 ): boolean {
 	return guideSchemaVersion < currentSchemaVersion;
-}
-
-/**
- * Non-blocking stale-schema warning line for a guide, or undefined when the
- * guide is current. Peer of the `⚠ malformed` catalog line — detection,
- * never a gate (the guide still loads and runs). `current` defaults to
- * GUIDE_SCHEMA_VERSION; tests pass a bumped value to force staleness.
- */
-export function staleSchemaLine(
-	guide: ApiGuide,
-	current: number = GUIDE_SCHEMA_VERSION,
-): string | undefined {
-	const v = guide.schemaVersion ?? 0;
-	if (!isStaleSchema(v, current)) return undefined;
-	return `  ⚠ schemaVersion ${v} < current ${current} — guide may need updating`;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2731,10 +2752,7 @@ function formatOpSummary(ops: { name: string }[]): string {
  * shortName + op names only (the status-quo shape), so un-backfilled
  * guides render consistently with those that have a one-line summary.
  */
-export function formatGuideListings(
-	entries: { guide: ApiGuide }[],
-	current: number = GUIDE_SCHEMA_VERSION,
-): string {
+export function formatGuideListings(entries: { guide: ApiGuide }[]): string {
 	const lines: string[] = [];
 	for (const { guide } of entries) {
 		lines.push(
@@ -2742,8 +2760,6 @@ export function formatGuideListings(
 				(guide.description ? ` — ${guide.description}` : ""),
 		);
 		lines.push(`    ${formatOpSummary(guide.operations)}`);
-		const stale = staleSchemaLine(guide, current);
-		if (stale) lines.push(stale);
 	}
 	return lines.join("\n");
 }
@@ -2820,10 +2836,7 @@ export function shortNameErrorText(
 // here, where they'd bloat context for orgs with many guides.
 // ════════════════════════════════════════════════════════════════════
 
-export function formatApiGuideCatalog(
-	loaded: LoadedApiGuides,
-	current: number = GUIDE_SCHEMA_VERSION,
-): string {
+export function formatApiGuideCatalog(loaded: LoadedApiGuides): string {
 	const lines: string[] = ["API guides:"];
 
 	// Org-grouped rows preserve first-appearance order; guides without
@@ -2852,14 +2865,7 @@ export function formatApiGuideCatalog(
 		}
 		const domList = domains.size > 0 ? [...domains].join(", ") : "—";
 		const n = row.guides.length;
-		// Collapsed org row: a trailing ⚠ glyph when ANY guide in it is stale
-		// (hint only — the per-guide ⚠ line lives on the menu / detail view).
-		const stale = row.guides.some((g) =>
-			isStaleSchema(g.schemaVersion ?? 0, current),
-		);
-		lines.push(
-			`  🏛️ ${row.org} — ${n} guide${n > 1 ? "s" : ""} (${domList})${stale ? " ⚠" : ""}`,
-		);
+		lines.push(`  🏛️ ${row.org} — ${n} guide${n > 1 ? "s" : ""} (${domList})`);
 	}
 	for (const { name, guide } of orgless) {
 		const domains =
@@ -2867,8 +2873,6 @@ export function formatApiGuideCatalog(
 		lines.push(
 			`  ${guide.icon} ${guide.shortName} — ${domains} (verified ${guide.verified}, ${guide.operations.length} ops)`,
 		);
-		const stale = staleSchemaLine(guide, current);
-		if (stale) lines.push(stale);
 	}
 	for (const mal of loaded.malformed) {
 		lines.push(

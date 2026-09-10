@@ -86,8 +86,9 @@ discover available versions.
         └── .venv/           ← you create this (engine pip pkg + playwright)
 ```
 
-This is a **different tree from any in-repo test fixtures** (which live
-gitignored under `bench/miniwob/fixtures/` for the evaluation harness).
+This is a **different tree from the MiniWoB evaluation content**
+(cloned outside the repo to `/tmp/miniwob-plusplus` by
+`npm run setup:miniwob`; overridable via `MINIWOB_HTML_ROOT`).
 The `~/.pi/agent/pi-lean-portal/user-backends/` tree is what the pi
 agent's production `detectPluginType` reads at runtime. The two concerns
 are deliberately separate.
@@ -146,6 +147,13 @@ library — the `PythonPluginAdapter` injects the package's
 `from pi_browser_bridge.playwright_base import PlaywrightBridge` works
 from your venv without a PyPI package.
 
+Note: on first import the bridge runs `patch_playwright()` (from the
+shared `pi_browser_bridge` lib on `PYTHONPATH`), which makes a small,
+idempotent, one-time edit to Playwright's `coreBundle.js` inside this
+venv — it guards a Juggler crash path and is required for the bridge
+to work. It warns on failure and can be applied manually with
+`python -m pi_browser_bridge.patch_playwright`.
+
 ### 4. Fetch the patched binary
 
 Engine-specific. For Camoufox:
@@ -203,10 +211,11 @@ Notes:
   resolved against `USER_BACKENDS_DIR` (that nicety is intentionally
   out of scope). Point it
   at `<user-backends>/camoufox-py/.venv/bin/python`.
-- **`dir`** is resolved against the user-backends root (multi-root
-  discovery: package `backends/` → `USER_BACKENDS_DIR` → absolute). A
-  bare `"camoufox-py"` resolves to `~/.pi/agent/pi-lean-portal/
-  user-backends/camoufox-py/`. You may also pass an absolute `dir`.
+- **`dir`** is resolved against the user-backends root. An absolute
+  `dir` short-circuits discovery entirely; otherwise multi-root
+  discovery tries package `backends/` first, then `USER_BACKENDS_DIR`
+  (so a bare `"camoufox-py"` resolves to `~/.pi/agent/pi-lean-portal/
+  user-backends/camoufox-py/`).
 - **`launch`** keys are forwarded to the bridge as `plugin_config.launch`
   via the `browser.init` RPC. The Camoufox bridge reads them in
   `_launch_browser()` and passes them to `camoufox.NewBrowser`. Defaults
@@ -239,6 +248,12 @@ every line of `bridge.py`, you created the venv, and you fetched the
 binary. Audit anything you copy from elsewhere before pointing the
 agent at it; the bridge runs as a subprocess with whatever network and
 filesystem access your user account has.
+
+One side effect to know about: at import the bridge self-patches the
+Playwright install in the venv (`pi_browser_bridge.patch_playwright`)
+— a guarded, idempotent fix to `coreBundle.js`. You can read it at
+`backends/python-base/pi_browser_bridge/patch_playwright.py` as part
+of your audit.
 
 ### 9. Benchmarking (optional)
 
@@ -288,7 +303,7 @@ as class attributes on your subclass:
 | `_wrap_mw_eval_in_eval` | `False` | `do_evaluate` rewrites the expression as `eval(<JSON-string of expression>)` before prepending `_eval_prefix`, so multi-statement scripts survive Camoufox's `let _s = (${script})` main-world wrapper (which only accepts a single expression). Camoufox-only; flip back to `False` when a future driver fixes the wrapper. |
 | `_settle_budget_ms` | `400` | Poll budget (ms) for `_wait_for_navigation_settle` when no `framenavigated` event fires. Stealth backends whose patched Juggler fires events with higher latency (e.g. Camoufox) set a larger value (2000) to avoid settling before the navigation commit is observable. |
 | `_url_stability_settle` | `False` | When True, the no-nav poll waits for the URL to stabilise at a new value for 150 ms before exiting, instead of a fixed budget. Complements a wider `_settle_budget_ms` by confirming the URL has finished changing. |
-| `_csp_safe_readonly_via_init_script` | `False` | `create_browser_context` registers an init script (isolated world, CSP-free) that wraps the EXTRACTOR_SCRIPT in a `DOMContentLoaded`-deferred IIFE writing JSON to `<meta id="__pi-extract">`. `do_evaluate(read_only=True)` reads from that meta via `query_selector` + `get_attribute` instead of `page.evaluate` (which is CSP-blocked on some patched-Firefox stealth binaries). |
+| `_csp_safe_readonly_via_init_script` | `False` | `create_browser_context` registers an init script (isolated world, CSP-free) that wraps the EXTRACTOR_SCRIPT in a `DOMContentLoaded`-deferred IIFE writing JSON to `<meta id="__pi-extract">`. `do_evaluate(read_only=True)` reads from that meta via `query_selector` + `get_attribute` instead of `page.evaluate` (which is CSP-blocked on some patched-Firefox stealth binaries). The adapter plumbs the script via the `browser.init` config key `readOnlyExtractorScript` — re-implementations of the adapter side must send it the same way. |
 
 All flags default off, so the shipped `chromium-py` / `firefox-py`
 behavior is bit-identical to a pre-stealth install. For the two
@@ -348,7 +363,7 @@ every supported field explained:
 | `capabilities.engine` | Browser engine identifier: `"firefox"` or `"chromium"`. Controls capability resolution. |
 | `capabilities.supportsFullPageScreenshot` | Whether the backend can capture full-page screenshots. |
 | `capabilities.supportsJavaScriptEvaluate` | Whether the backend supports `page.evaluate`. |
-| `transportTimeoutMs` | JSON-RPC transport timeout in milliseconds. Defaults to the adapter's built-in fallback (usually 30s). |
+| `transportTimeoutMs` | JSON-RPC transport timeout in milliseconds. Defaults to the adapter's built-in fallback (60s). |
 | `launch` | Options forwarded to the bridge as `plugin_config.launch` via the `browser.init` RPC. |
 | `launch.headless` | Run browser headless (`true`) or with a visible window (`false`). |
 | `launch.humanize` | Add human-like mouse/timing noise to evade bot detection. |

@@ -17,10 +17,12 @@ A quirk is either realized by the framework or deferred to a user helper:
 - **Built-in** — implemented once in the core (`parse-api-guide.ts`,
   `helpers.ts`, `transport.ts`, `path-template.ts`) so every guide gets it.
 - **Local-helper** (`core/local-helpers.ts`) — a user-authored `helper.ts`
-  beside the guide at `~/.pi/agent/pi-lean-host/api-guides/<domain>/helper.ts`,
-  loaded on demand when an op sets `helper: true`. Pre-call transform only:
+  beside the guide at
+  `~/.pi/agent/pi-lean-host/api-guides/<slug(shortName)>/helper.ts`, loaded on
+  demand when an op sets `helper: true`. Pre-call transform only:
   `(params, ctx) => params`, reshapes the params before URL templating / query
-  assembly. One helper per domain. A load/execution throw disables it for the
+  assembly. One helper per guide (keyed by the guide's directory name,
+  `slug(shortName)` — not the routing domain). A load/execution throw disables it for the
   session.
 
 A third, distinct mechanism — **post-response `transform`** — is a gated
@@ -41,7 +43,7 @@ what `transform` receives on paginate ops.
 | Response formats | JSON, XML (`fast-xml-parser`, `removeNSPrefix`) | — |
 | Charsets | UTF-8 + any IANA charset via `TextDecoder` (guide `charset` as fallback) | — |
 | Content negotiation | `accept: json`/`xml` shorthands, free-form media strings | Query-param negotiation is just a param default — not a helper |
-| Auth | `auth.kind: none`, `auth.headers` (extra headers, e.g. `DEMO_KEY`), `static-key` (secrets store + fail-closed), `oauth2` (both grants — cc auto-mint / auth-code paste flow, Bearer or query injection, multi-grant slots) | `User-Agent` POLICY (not expressible in a guide; UA via transport config or `auth.headers`) |
+| Auth | `auth.kind: none`, `auth.headers` (extra headers, e.g. `DEMO_KEY`), `static-key` (secrets store + fail-closed), `oauth2` (both grants — cc auto-mint / auth-code paste flow, Bearer or query injection, multi-grant slots) | Hardcoded default `User-Agent` sent only when the request doesn't set one; a guide overrides it with a literal `auth.headers` entry. A UA *policy* (spoofing, rotation) stays out of guides; that's a browser-engine backend concern |
 | Pagination edge signals | empty-array stop, non-array wrap-and-continue, server-total surfacing (`totalCountPath`), continue-token bag (`tokenBag`), OAI `resumptionToken` | `endOfRecords: true` bool, count-bounded stop via a total field, `Link` header. **Reserved shape for the header case:** a new `linkHeader` pagination style + `linkRel?: string` (default `"next"`) through the existing nextLink SSRF guard — never a magic value on `nextLinkPath` |
 | Rate-limit signaling | HTTP 429 + exponential backoff + `Retry-After` (delay-seconds and HTTP-date) | `X-RateLimit-*` (informational only, agent reads headers) |
 | Caching / conditional | grant-based caching: `Cache-Control: max-age` TTL, ETag/`If-None-Match` → 304 (ETag-only → revalidate-only, no stale window); no TTL is fabricated for header-less responses. `Expires` parsing deliberately not implemented (HTTP/1.0 legacy; revisit on the first real Expires-only recipe) | — |

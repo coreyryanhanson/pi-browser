@@ -11,6 +11,10 @@
 > [`packages/pi-lean-portal/AGENTS.md`](packages/pi-lean-portal/AGENTS.md).
 > For the search-owned `search` status bar slot, see
 > [`packages/pi-lean-search/AGENTS.md`](packages/pi-lean-search/AGENTS.md).
+> For host internals (the `/api` subcommand semantics, toggle states &
+> focus-mode guard, guide schema & versioning, auth/secrets/oauth machinery,
+> `api-guides/` axis fixtures, and the Files/test inventories), see
+> [`packages/pi-lean-host/AGENTS.md`](packages/pi-lean-host/AGENTS.md).
 > The dimension package has a small stub `AGENTS.md` that points back here.
 
 ## What This Is
@@ -89,7 +93,7 @@ Portal dispatches through a `PluginRegistry` + typed `BrowserPlugin` interface; 
 
 **Search:** `/searxng-status` — test the full SearXNG search pipeline and update the status bar glyph.
 
-**Host:** `/api on|off|learn|status|helpers|secrets|verify|delete|oauth|bootstrap` — `/api on` (API tools enabled), `/api off` (all disabled), `/api learn` (API tools + api-learn + api-probe + api-scaffold + api-store + oauth-mint for guide authoring), `/api status` (active guides + helpers), `/api helpers [domain]` (list/view helper source), `/api secrets [domain [name]]` (provision/list/delete per-domain secret store, names only never values), `/api verify <domain> [guide] [--force]` (run every runnable op live, stamp `verified: today` only on all-pass), `/api delete <domain> [guide]` (`rm -rf` guide dir + invalidate guide-store cache), `/api oauth <domain> …` (init / mint / `--status` / `--refresh` / `--revoke` / `--code <code>` per token slot), `/api bootstrap oauth <domain> <spec>` (agent-driven OAuth2 bootstrap: injects a research brief via `sendUserMessage` followUp, exits; auto-enables learn — the flip is focus-guard-refused loudly when focus holds; headless-refused). `status`/`helpers`/`secrets`/`verify`/`delete`/`oauth` and bare `/api` are read-only or always-available — the focus-mode guard doesn't apply to them; `bootstrap` writes toolset state only when learn was off, so the guard is enforced inside the handler, scoped to the flip.
+**Host:** `/api on|off|learn|status|helpers|secrets|verify|delete|oauth|bootstrap` — `/api on` (API tools enabled), `/api learn` (authoring mode: adds api-learn + api-probe + api-scaffold + api-store + oauth-mint), `/api off` (all disabled). Subcommand semantics, toggle states & focus-mode guard, and the two-state cascade live in [`packages/pi-lean-host/AGENTS.md`](packages/pi-lean-host/AGENTS.md) ("Toggle states & focus-mode guard").
 
 **Defaults for new sessions** are resolved by the `pi-tool-masking` library, not portal/search/host code: `initBrowserToggle` and `initApiToggle` pass the packaged `ToolsetSpec` (with its own `defaultEnabled`) straight to `defineToolset`, and the library's restore reads the `toolsetDefaults` block from merged Pi settings (`~/.pi/agent/settings.json` + `.pi/settings.json`) before falling back to the packaged default. Keys: `toolset-state:pi-lean-dimension.web`, `toolset-state:pi-lean-dimension.web-learn`, `toolset-state:pi-lean-dimension.search` (search key only honored when `pi-lean-search` is installed), `toolset-state:pi-lean-dimension.api`, `toolset-state:pi-lean-dimension.api-learn` (host keys only honored when `pi-lean-host` is installed). Packaged defaults: web on / web-learn off, search on, api on / api-learn off. The legacy `browserToggle.defaultEnabled` key was **removed in 0.4.0** and is no longer read — the migration warning that bridged it is gone too.
 
@@ -117,7 +121,7 @@ The toggle also manages a `SIBLING_TOOL_NAMES` set populated with `"web-search"`
 | Portal contract/backend | `pi-lean-portal/__tests__/` | 8 | varies | Per-backend (auto-skip) |
 | MiniWoB behavioral | `bench/miniwob/suites/` | 8 | 130 tasks × 4 + user-backends + smoke* | Chromium + Firefox + Python + MiniWoB content |
 | Search | `pi-lean-search/` | 2 | 29 | No |
-| Host structural | `pi-lean-host/__tests__/` | 38 | ~905 | No |
+| Host structural | `pi-lean-host/__tests__/` | 41 | ~1060 | No |
 | Host recipe-validity | `pi-lean-host/api-guides/<domain>/*.test.ts` | 14 | ~46 | No |
 
 Per-file detail for the portal-owned test lists (structural, python bridge, per-backend contract, shared test utilities) lives in [`packages/pi-lean-portal/AGENTS.md`](packages/pi-lean-portal/AGENTS.md) ("Testing (portal detail)"). Host-owned test detail lives in [`packages/pi-lean-host/AGENTS.md`](packages/pi-lean-host/AGENTS.md). MiniWoB suite detail (preflight gate, prerequisites, env overrides, suite files, coverage ceiling) lives in [`bench/AGENTS.md`](bench/AGENTS.md).

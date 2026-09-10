@@ -44,9 +44,10 @@ parity + quirks introspection suites against it. Properties:
   `page.evaluate` writes to the main world (Camoufox's isolated-world
   stealth otherwise blocks them). The bridge also sets
   `main_world_eval=True` in the `NewBrowser` kwargs.
-- **Wheel-based scroll** — `_scroll_via_wheel = True` uses
-  `page.mouse.wheel` instead of `window.scrollBy` eval (avoids
-  eval-write under isolated-world stealth).
+- **Eval-based scroll** — leaves the base default
+  (`_scroll_via_wheel = False`): scroll goes through a
+  `window.scrollBy` eval, not `page.mouse.wheel` (the wheel path
+  no-ops on Camoufox binaries `152.0.4-beta.27+`).
 
 If you want a stealth backend and you do not have a strong reason to
 pick something else, use Camoufox via the template in

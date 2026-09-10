@@ -178,14 +178,16 @@ api-fetch domain="wikipedia.org" operation="searchPages" params={srsearch:"clima
 - `gatherAll` (optional) — `true` paginates to gather all items up to the
   guide's `gatherAllMax` ceiling (default `1000`, overridable per-guide and
   per-op).
+- `fresh` (optional) — `true` bypasses the response cache and forces a full
+  network fetch.
 
 `api-fetch` resolves every guide claiming `domain`, finds the named
 `operation` across them, and executes it against the matching guide.
 Exactly one hit executes; zero hits lists the ops from all matching guides
 (a multi-guide domain — each guide in its own directory — so you can pick);
 an op name appearing in ≥2 guides is an ambiguous collision the guide
-authors must fix (re-author via `api-learn` to rename). The agent never sees a
-URL, never sees a header, never sees the auth scheme. Output is an inline
+authors must fix (re-author via `api-learn` to rename). The agent never sees an
+unredacted URL, never sees a header value, never sees the auth scheme. Output is an inline
 preview (~4000 chars) with larger responses spilled to a temp file under
 `/tmp/pi-lean-host/` (overridable via `PI_HOST_TEMP_DIR`) — `read` it with
 offset/limit for specific sections.
@@ -499,8 +501,8 @@ Migrating a guide from the old flat shape (`requires`/`optional` rosters,
 Provisioning is interactive (`ctx.ui` dialogs — the value is captured
 **transcript-safely** and written straight to the store, never returned). On
 headless hosts there is no dialog, so `/api secrets` prints the direct
-file-write instructions instead — write the `0600` file yourself before pi
-starts (a one-line `install -m 600` + `cat >` step). Secrets persist at
+file-write instructions instead — write a `{ "<name>": "<value>" }` JSON
+mapping into the `0600` `<domain>.json` file yourself before pi starts. Secrets persist at
 `~/.pi/agent/pi-lean-host/secrets/<domain>.json` (mode `0600`).
 
 ### The status footer

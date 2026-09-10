@@ -8,8 +8,6 @@
 > `moduleDetection: force`), see [`../../AGENTS.md`](../../AGENTS.md). For the
 > design docs, see [`docs/design/api-helper-escape-valve.md`](docs/design/api-helper-escape-valve.md).
 >
-> Note: the monorepo root `AGENTS.md` predates this package and does not yet
-> list it — trust this file for host-specific commands and structure.
 
 ## What this package is
 
@@ -212,7 +210,9 @@ speculatively.
     `~/.pi/agent/pi-lean-host/api-guides/<slug(shortName)>/helper.ts`, loaded on demand
     via dynamic `import()` when an op sets `helper: true`. It receives the
     agent-supplied params and returns the params the executor uses for URL
-    templating / query assembly. One helper per domain is the v1 contract. A
+    templating / query assembly. One helper per guide (routed by the guide's
+    directory name, `slug(shortName)` — not the routing domain) is the v1
+    contract. A
     load failure or execution throw disables the helper for the rest of the
     session. See `api-helper-escape-valve.md` for the built-in vs local-helper
     classification.
@@ -295,9 +295,11 @@ speculatively.
     injected **below** the agent params map (never into it) and redacted to
     `?param=***` on every surfaced URL (`result.url`, `PaginateResult.urls`
     incl. server-supplied `nextUrl`, and the URL stored on `HelperError.url`).
-    Shared `authStatusLine()` footer renders five metadata-only states on
-    both `api-guide` and `api-fetch` (no-auth / ok / nudge-provision /
-    ok-optional / optional-not-provisioned).
+    Shared `authStatusLine()` footer renders eight metadata-only states on
+    both `api-guide` and `api-fetch` — five static-key (no-auth / ok /
+    nudge-provision / ok-optional / optional-not-provisioned) plus the
+    oauth2 states (no token → nudge `/api oauth` / token expired[, refreshable]
+    / ok).
   - **`api-probe` extras**: inline `auth` block (injection fields:
     `secretRefs` / `secretQueryRefs` / `headerPrefixes` / `useTokenStore`, plus
     client-credentials mint-on-demand fields `tokenUrl` + `clientId` [+
@@ -442,6 +444,9 @@ speculatively.
   no-grant-not-stored matrix, `no-cache` stickiness, 304 grant
   refresh/no-store delete, eviction-race (arrival-order independent),
   fresh-seeding, and the auth/fresh 304-arm gates),
+  `path-secrets` (secretPathRefs executor + resolve-op contract: token
+  fill + agent-param drop, query isolation, URL/error redaction, 401
+  scrub, fail-closed on missing ref),
   `path-secrets-transport` (path-secret requests skip the cache read,
   write, and 304 arms),
   `api-probe`, `verify-command` (mocked-transport: strict threshold, auth
@@ -510,7 +515,7 @@ on save (each guide records its authoring vintage — stamp-before-validate,
 so a hand-written recipe without the line still saves), absent-on-read
 defaults to `0` (the floor, not current), and a stale guide (`schemaVersion
 < current`, including absent/malformed → floor `0`) **fails to parse and
-routes to malformed** — a **hard gate** as of `0.5.0`, not a warning. The
+routes to malformed**. The
 refusal's `fix` names the on-disk path (or "this guide" on bare parses),
 the current version, and the migration doc
 (`docs/migration-v1.md`, shipped in the npm tarball); the loader emits a

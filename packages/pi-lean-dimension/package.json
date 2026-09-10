@@ -1,7 +1,7 @@
 {
 	"name": "pi-lean-dimension",
 	"version": "0.4.0",
-	"description": "Pi extension. The full Pi web-tools suite in one install — interactive browsing (pi-lean-portal), SearXNG search (pi-lean-search), and declarative HTTP API client (pi-lean-host), unified under a /web and /api toggle.",
+	"description": "Bundles pi-lean-portal, pi-lean-search, and pi-lean-host: web browsing on Chromium or Firefox, extendable with any Playwright-based stealth backend, keyless SearXNG search, and REST API recipes with OAuth and local secrets. /web and /api toggles.",
 	"keywords": [
 		"pi-package",
 		"pi-extension",

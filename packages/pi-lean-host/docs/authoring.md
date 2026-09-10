@@ -30,9 +30,10 @@ api-learn (write)  →  api-fetch (verify)  →  api-learn (fix)  →  api-fetch
 ```
 
 exactly like the browser's `web-learn → browser-navigate → web-learn` loop,
-just at the recipe layer. `api-learn`'s return message nudges this
-("guide saved; call `api-fetch(...)` to verify"). A guide on disk that has
-been successfully executed against *is* verified.
+just at the recipe layer. `api-learn`'s return message nudges this — it
+ends with "Test each op via `api-fetch({domain, operation, params})` — pass
+the values yourself … `/api verify` is the user's batch stamp." A guide on
+disk that has been successfully executed against *is* verified.
 
 ### Authoring paths, prioritized
 
@@ -84,7 +85,7 @@ The fastest way to a first guide is to let the tools draft it:
 placeholders, then save with `api-learn`. For
 **complete worked recipes** (real endpoints, `verified:` provenance,
 auth-in-place, helper examples), see the caritas recipe library
-(see the README's [Bundled Reference Recipes](../README.md#bundled-reference-recipes))
+(see the README's [Reference Recipes (caritas)](../README.md#reference-recipes-caritas))
 and copy a domain folder that matches your target.
 
 ### Field reference
@@ -124,7 +125,7 @@ and copy a domain folder that matches your target.
 | `operations[].path` | op | — | relative path; `{token}` = inferred path param (no re-declaration); a token declared in `auth.secretPathRefs` is store-filled instead — see [Static-key auth](#static-key-auth-in-the-guide) |
 | `operations[].accept` | op | `json` | `json` \| `xml` \| `<any media-type string>` — request-side `Accept` header (distinct from `responseShape.format`) |
 | `operations[].params` | op | `{}` | query params; `{ required?, default?, description?, listStyle? }` per key — unknown keys are a parse error (typo tripwire) |
-| `operations[].params.<p>.listStyle` | op | — | multi-value serialization for an **array** value: `comma` joins with `,` (`id=a,b`), `repeat` fans out one pair per element (`id=a&id=b`), `bracket` fans out with the wire key dressed `+[]` (`id[]=a&id[]=b`). Absent = single-valued. Scalars ignore it entirely. An array on a non-`listStyle` param (or on a passthrough/date param) is a runtime error — pass a scalar or declare a style. A comma-bearing element on `comma` is rejected (the joined wire form is ambiguous). Empty arrays are rejected (the param would be silently dropped), as are non-scalar (`string \| number \| boolean`) elements. An array `default` follows the same rules at parse time (non-empty, scalar elements, comma-free on `comma`). With `bracket`, declare the clean name — a param name already ending in `[]` is a parse error (the wire key would double-dress). A `listStyle` param name may not collide with the op's effective pagination/tokenBag wire names (parse error — those writes supersede base params). |
+| `operations[].params.<p>.listStyle` | op | — | multi-value serialization for an **array** value: `comma` joins with `,` (`id=a,b`), `repeat` fans out one pair per element (`id=a&id=b`), `bracket` fans out with the wire key dressed with `[]` (`id[]=a&id[]=b`). Absent = single-valued. Scalars ignore it entirely. An array on a non-`listStyle` param (or on a passthrough/date param) is a runtime error — pass a scalar or declare a style. A comma-bearing element on `comma` is rejected (the joined wire form is ambiguous). Empty arrays are rejected (the param would be silently dropped), as are non-scalar (`string \| number \| boolean`) elements. An array `default` follows the same rules at parse time (non-empty, scalar elements, comma-free on `comma`). With `bracket`, declare the clean name — a param name already ending in `[]` is a parse error (the wire key would double-dress). A `listStyle` param name may not collide with the op's effective pagination/tokenBag wire names (parse error — those writes supersede base params). |
 | `operations[].dateParams` | op | — | optional `{param: format}` → normalizes ISO dates to `iso8601` \| `yyyymmdd` \| `yyyy-mm-dd` (query params only) |
 | `operations[].helper` | op | `false` | `true` runs this domain's local helper for the op |
 | `operations[].transform` | op | `false` | `true` runs the helper's `transform` export on the parsed response (graceful — a throw returns raw data, never disables the op) |
@@ -384,9 +385,8 @@ mitigations:
 - A load/call guard wraps both `import()` and each call in `try/catch`. Any
   in-frame throw (syntax error, missing dep, throw during execution) rejects
   the promise — it does **not** crash pi. On failure the helper is marked
-  disabled for the session and surfaced via `/api status` (and the status-bar
-  glyph). pi keeps running; only that one helper is dead until you fix it and
-  reload.
+  disabled for the session and surfaced via `/api status`. pi keeps running;
+  only that one helper is dead until you fix it and reload.
 - The one case the guard **cannot** catch is a helper that registers a
   *background* callback (`setTimeout`, `setInterval`, `process.on(...)`) and
   throws from it later — that escapes the call frame as an

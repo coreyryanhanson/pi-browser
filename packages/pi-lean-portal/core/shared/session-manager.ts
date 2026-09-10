@@ -20,8 +20,6 @@ export interface BrowserSession {
 	cachePopulatedAt?: number;
 	/** Timestamp of the last interaction that may have mutated the DOM */
 	lastInteractionAt?: number;
-	/** Timestamp of last activity */
-	lastActive: number;
 	/** Whether the session has crashed and needs recovery */
 	crashed: boolean;
 	/** Whether to auto-save storage state on cleanup */
@@ -53,14 +51,12 @@ class SessionManager {
 			existing.pluginName = pluginName;
 			delete existing.currentUrl;
 			delete existing.currentTitle;
-			existing.lastActive = Date.now();
 			existing.crashed = false;
 			return existing;
 		}
 		const session: BrowserSession = {
 			taskId,
 			pluginName,
-			lastActive: Date.now(),
 			crashed: false,
 		};
 		this.#sessions.set(taskId, session);
@@ -97,7 +93,6 @@ class SessionManager {
 		for (const [k, v] of Object.entries(updates)) {
 			if (v !== undefined) (session as any)[k] = v;
 		}
-		session.lastActive = Date.now();
 	}
 
 	// ─── Last navigation storage (for session auto-recovery) ───
@@ -118,10 +113,6 @@ class SessionManager {
 
 	getLastNav(taskId: string): LastNavEntry | undefined {
 		return this.#lastNav.get(taskId);
-	}
-
-	clearLastNav(taskId: string): void {
-		this.#lastNav.delete(taskId);
 	}
 
 	// ─── Session lifecycle ────────────────────────────────────────────
@@ -154,9 +145,7 @@ class SessionManager {
 
 	getStatus(): string {
 		const active = this.getActiveSessions();
-		const crashed = Array.from(this.#sessions.values()).filter(
-			(s) => s.crashed,
-		);
+		const crashed = Array.from(this.#sessions.values()).filter((s) => s.crashed);
 
 		if (active.length === 0) {
 			if (crashed.length > 0) {
@@ -202,10 +191,6 @@ class SessionManager {
 		return Array.from(this.#sessions.values()).filter(
 			(s) => s.currentUrl && !s.crashed,
 		);
-	}
-
-	get activeCount(): number {
-		return this.getActiveSessions().length;
 	}
 
 	/**

@@ -54,7 +54,6 @@ type MockSession = {
 	currentSnapshotFingerprint?: string;
 	cachePopulatedAt?: number;
 	lastInteractionAt?: number;
-	lastActive: number;
 	crashed: boolean;
 	persistState?: boolean;
 	profileName?: string;
@@ -125,9 +124,9 @@ describe("handleStatusSubcommand", () => {
 	// ── Status line ────────────────────────────────────────────
 
 	it("includes the status string from sessionManager", () => {
-		vi.mocked(sessionManager.getStatus).mockReturnValue(
-			"🍊 chromium: example.com",
-		);
+		vi
+			.mocked(sessionManager.getStatus)
+			.mockReturnValue("🍊 chromium: example.com");
 		handleStatusSubcommand(ctx, true, true);
 
 		const msg = notifySpy.mock.lastCall?.[0] as string;
@@ -143,14 +142,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com/page1",
 				currentTitle: "Page One",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "shopping",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 		vi.mocked(sessionManager.pluginSymbol).mockReturnValue("🍊");
 
 		handleStatusSubcommand(ctx, true, true);
@@ -168,7 +166,6 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com/a",
 				currentTitle: "Page A",
-				lastActive: Date.now(),
 				crashed: false,
 			},
 			{
@@ -176,14 +173,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "firefox",
 				currentUrl: "https://other.com/b",
 				currentTitle: "Page B",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "work",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 		vi.mocked(sessionManager.pluginSymbol).mockReturnValue("🍊");
 
 		handleStatusSubcommand(ctx, true, true);
@@ -198,13 +194,12 @@ describe("handleStatusSubcommand", () => {
 			{
 				taskId: "browser-1",
 				pluginName: "chromium",
-				lastActive: Date.now(),
 				crashed: false,
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 		vi.mocked(sessionManager.pluginSymbol).mockReturnValue("🍊");
 
 		handleStatusSubcommand(ctx, true, true);
@@ -265,14 +260,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com",
 				currentTitle: "Example",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "work",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 
 		handleStatusSubcommand(ctx, true, true);
 
@@ -347,14 +341,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com",
 				currentTitle: "Example",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "_session-abc123",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 
 		handleStatusSubcommand(ctx, true, true);
 
@@ -399,14 +392,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com",
 				currentTitle: "Example",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "_session-abc123",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 
 		handleStatusSubcommand(ctx, true, true);
 
@@ -426,9 +418,9 @@ describe("handleStatusSubcommand", () => {
 			{ name: "work", stateSize: "480 B" },
 		];
 		vi.mocked(listProfiles).mockReturnValue(profiles);
-		vi.mocked(sessionManager.getStatus).mockReturnValue(
-			"🍊 chromium: example.com",
-		);
+		vi
+			.mocked(sessionManager.getStatus)
+			.mockReturnValue("🍊 chromium: example.com");
 
 		const sessions: MockSession[] = [
 			{
@@ -436,14 +428,13 @@ describe("handleStatusSubcommand", () => {
 				pluginName: "chromium",
 				currentUrl: "https://example.com/page1",
 				currentTitle: "Page One",
-				lastActive: Date.now(),
 				crashed: false,
 				profileName: "work",
 			},
 		];
-		vi.mocked(sessionManager.getActiveSessions).mockReturnValue(
-			sessions as unknown as BrowserSession[],
-		);
+		vi
+			.mocked(sessionManager.getActiveSessions)
+			.mockReturnValue(sessions as unknown as BrowserSession[]);
 		vi.mocked(sessionManager.pluginSymbol).mockReturnValue("🍊");
 
 		handleStatusSubcommand(ctx, true, true);

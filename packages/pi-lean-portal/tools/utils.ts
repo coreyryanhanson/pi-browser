@@ -171,5 +171,3 @@ export function renderExpandedText(
 		text += `\n${theme.fg("muted", `… ${content.length - limit} more chars`)}`;
 	return text;
 }
-
-export type { ExtensionAPI };

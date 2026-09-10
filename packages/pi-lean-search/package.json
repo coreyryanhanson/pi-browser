@@ -24,8 +24,6 @@
 		"LICENSE",
 		"web-search-tool.ts",
 		"search-config.ts",
-		"verify-ship-manifest.ts",
-		"ship-manifest.test.ts",
 		"README.md"
 	],
 	"pi": {

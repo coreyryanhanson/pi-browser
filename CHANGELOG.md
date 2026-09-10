@@ -220,6 +220,15 @@
 
 ### Changed
 
+- **`pi-lean-search` — unconfigured-SearXNG startup notice** — when
+  `searxng.url` is unset, the `search` status bar slot stays hidden
+  (existing behavior) but a one-time warning notify now fires on Pi
+  process boot pointing at the `searxng.url` setting and
+  `/searxng-status`. Skipped on `/new`, `/resume`, and `/fork` so it
+  never repeats mid-session; users who deliberately don't run SearXNG
+  see one boot-time message instead of a hidden slot with no
+  explanation.
+
 - **`pi-lean-host` — multi-value query params (`listStyle`) + loud array
   rules** — `QueryParamSpec` gains `listStyle?: "comma" | "repeat" |
   "bracket"` (additive; no `schemaVersion` bump): an **array** value on a

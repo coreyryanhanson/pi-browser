@@ -45,6 +45,7 @@ Search owns the `search` status bar slot, shown only when `pi-lean-search` is in
 - `● searxng` (warning/yellow) — server up but pipeline degraded
 - `● searxng` (error/red) — unreachable
 - `○ searxng` — search tools off
+- *(no slot)* — unconfigured: no `searxng.url` in settings; a one-time warning notify on Pi process boot (`session_start` `reason: "startup"` only, not `/new`/`/resume`/`/fork`) points at the setting
 
 Search probes SearXNG reachability on `session_start` and `/searxng-status` and sets the glyph color. Portal writes the `○ searxng` off state when `/web off` is called — search overrides with the health-colored glyph on the next probe. (The `browser` slot is owned by `pi-lean-portal`; see that package's `AGENTS.md`.)
 
@@ -54,7 +55,9 @@ If `searxng.url` is unset or SearXNG is unreachable, `web-search` returns a
 clear setup message on call (not a thrown error, not a silent empty result).
 This keeps `pi-lean-dimension` (the umbrella) safe to install before SearXNG
 is ready — the browser works immediately, and `web-search` self-documents
-its setup.
+its setup. The status bar slot is hidden while unconfigured; a one-time warning
+notify at Pi startup (boot only, not `/new`/`/resume`/`/fork`) points at the
+`searxng.url` setting.
 
 ## Peer relationship
 

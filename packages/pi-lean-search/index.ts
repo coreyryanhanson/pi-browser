@@ -232,7 +232,7 @@ export default function (pi: ExtensionAPI) {
 	pi.events.on(TOOLSET_EVENTS.restored, syncSearchState);
 
 	// ── Session start: health probe + glyph ──────────────────
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on("session_start", async (event, ctx) => {
 		_lastCtx = ctx;
 
 		// Re-read config in case it changed between sessions
@@ -241,6 +241,15 @@ export default function (pi: ExtensionAPI) {
 		if (!_searxngUrl) {
 			_lastHealth = null;
 			renderSearchGlyph(ctx);
+			// Discoverability hint only on Pi process boot — not on /new,
+			// /resume, or /fork, where it would be repeated noise.
+			if (event.reason === "startup") {
+				ctx.ui.notify(
+					"SearXNG is not configured (set `searxng.url` in settings.json) — " +
+						"web-search is disabled. Run /searxng-status after configuring.",
+					"warning",
+				);
+			}
 			return;
 		}
 

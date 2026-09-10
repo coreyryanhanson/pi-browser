@@ -432,9 +432,10 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 			const parsed = parseSnapshot(snap);
 
 			// Update cache
-			this.getOrCreateCache(taskId).clear();
+			const cache = this.getOrCreateCache(taskId);
+			cache.clear();
 			for (const [ref, node] of parsed.elements) {
-				this.getOrCreateCache(taskId).set(ref, node);
+				cache.set(ref, node);
 			}
 
 			// Collect recent dialog/crash events (last 10)

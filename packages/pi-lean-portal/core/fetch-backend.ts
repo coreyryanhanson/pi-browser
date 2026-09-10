@@ -88,7 +88,6 @@ async function performFetch(
 	timeoutMs: number = 30_000,
 	signal?: AbortSignal,
 ): Promise<{
-	html: string;
 	title: string;
 	needsJavaScript: boolean;
 	root: ReturnType<typeof parseHtml>;
@@ -127,7 +126,7 @@ async function performFetch(
 		const title = extractTitle(root);
 		const needsJavaScript = detectNeedsJavaScript(root);
 
-		return { html, title, needsJavaScript, root };
+		return { title, needsJavaScript, root };
 	} finally {
 		clearTimeout(timeoutId);
 	}
@@ -304,7 +303,6 @@ export async function webFetch(
 
 	// Step 1: Perform fetch
 	let result: {
-		html: string;
 		title: string;
 		needsJavaScript: boolean;
 		root: ReturnType<typeof parseHtml>;
@@ -338,7 +336,7 @@ export async function webFetch(
 				content: msg,
 				backendUsed: "fetch",
 				error: msg,
-				...(statusCode !== undefined ? { statusCode } : {}),
+				...(statusCode === undefined ? {} : { statusCode }),
 			};
 		}
 

@@ -17,12 +17,6 @@ import {
 	Text,
 } from "@earendil-works/pi-tui";
 
-export interface PickerItem {
-	value: string;
-	label: string;
-	description?: string;
-}
-
 /** Shared SelectList theme callbacks — keep both pickers visually identical. */
 function pickerTheme(theme: { fg(color: string, text: string): string }) {
 	return {
@@ -37,7 +31,7 @@ function pickerTheme(theme: { fg(color: string, text: string): string }) {
 export async function pickWithDescription(
 	ctx: ExtensionContext,
 	title: string,
-	items: PickerItem[],
+	items: SelectItem[],
 ): Promise<string | undefined> {
 	if (ctx.mode !== "tui") {
 		const picked = await ctx.ui.select(
@@ -49,11 +43,8 @@ export async function pickWithDescription(
 			: items.find((i) => i.label === picked)?.value;
 	}
 
-	const selectItems: SelectItem[] = items.map((i) => {
-		const item: SelectItem = { value: i.value, label: i.label };
-		if (i.description !== undefined) item.description = i.description;
-		return item;
-	});
+	// Defensive copy so SelectList can't retain caller-owned item objects.
+	const selectItems: SelectItem[] = items.map((i) => ({ ...i }));
 	return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
 		const container = new Container();
 		container.addChild(new Text(theme.fg("accent", theme.bold(title))));
@@ -99,7 +90,7 @@ const DONE_VALUE = "__done__";
 export async function pickChecklist(
 	ctx: ExtensionContext,
 	title: string,
-	rows: PickerItem[],
+	rows: SelectItem[],
 ): Promise<string[] | undefined> {
 	if (ctx.mode !== "tui") {
 		const raw = await ctx.ui.input(
@@ -120,14 +111,10 @@ export async function pickChecklist(
 		let list = buildList();
 
 		function buildList(): SelectList {
-			const selectItems: SelectItem[] = rows.map((r) => {
-				const item: SelectItem = {
-					value: r.value,
-					label: `${checked.has(r.value) ? "✓" : "○"} ${r.label}`,
-				};
-				if (r.description !== undefined) item.description = r.description;
-				return item;
-			});
+			const selectItems: SelectItem[] = rows.map((r) => ({
+				...r,
+				label: `${checked.has(r.value) ? "✓" : "○"} ${r.label}`,
+			}));
 			selectItems.push({
 				value: DONE_VALUE,
 				label: "✔ Done — grant the checked scopes",

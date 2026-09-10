@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { apiStoreTool } from "../tools/index.js";
+import { apiStoreTool } from "../tools/api-store.js";
 import { contentText } from "../tools/utils.js";
 import { Check } from "typebox/value";
 import { writeSecret, setSecretsDir } from "../core/secrets-store.js";

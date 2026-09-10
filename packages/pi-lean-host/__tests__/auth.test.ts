@@ -36,7 +36,8 @@ import {
 } from "../core/secrets-store.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 import { slug } from "../core/path-template.js";
-import { apiFetchTool, apiGuideTool } from "../tools/index.js";
+import { apiFetchTool } from "../tools/api-fetch.js";
+import { apiGuideTool } from "../tools/api-guide.js";
 import { contentText } from "../tools/utils.js";
 import type { ApiGuide, Operation } from "../core/api-guide-types.js";
 

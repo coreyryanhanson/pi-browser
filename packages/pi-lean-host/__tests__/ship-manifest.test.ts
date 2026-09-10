@@ -10,7 +10,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { verifyShipManifest } from "../core/verify-ship-manifest.js";
+import { verifyShipManifest } from "./verify-ship-manifest.js";
 
 // Point verifyShipManifest at the package root, not __tests__/
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");

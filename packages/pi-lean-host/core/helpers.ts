@@ -694,6 +694,55 @@ function checkErrorEnvelope(
 	);
 }
 
+/** Shared secret-handling prelude for both executors (restGet + paginate).
+ *  Derives every store-secret-derived value the executors need — path-token
+ *  fill, query assembly inputs, redaction inputs, and the merged header set —
+ *  from the same inputs in the same way, so a hardening change to one
+ *  executor can't silently miss the other. Security-critical: keep both
+ *  executors on this one implementation. */
+function buildExecutorEnv(
+	guide: ApiGuide,
+	params: Record<string, unknown>,
+	opts?: SecretAuthOpts,
+) {
+	// Secret-owned path tokens (see splitPathSecretParams): the store fills
+	// them BELOW the agent params map — agent-supplied values are dropped.
+	const pathSecrets = opts?.secretPathParams ?? {};
+	const pathValues = Object.values(pathSecrets);
+	const hasPathSecrets = pathValues.length > 0;
+	const { fillParams, queryParamsForBuild } = splitPathSecretParams(
+		params,
+		pathSecrets,
+	);
+	// Secret query params are injected BELOW the agent-supplied map — never
+	// into it — so the returned `params` stays agent-supplied-only.
+	const secretParamNames = opts?.secretQueryParamNames ?? new Set<string>();
+	const secretParams = opts?.secretQueryParams ?? {};
+	const hasQuerySecret = Object.keys(secretParams).length > 0;
+	// Redaction closure for cross-domain redirect hops — built here where
+	// the values are already in scope; the transport stays value-agnostic.
+	const redactPathSecret = hasPathSecrets
+		? (u: string) => redactSecretPathValues(u, pathValues)
+		: undefined;
+	// Merge store-injected secret headers with literal auth.headers. oauth2
+	// carries no literal headers (the resolved Bearer token arrives via
+	// opts.authHeaders).
+	const literalHeaders =
+		guide.auth.kind === "oauth2" ? undefined : guide.auth.headers;
+	const extraHeaders = { ...literalHeaders, ...opts?.authHeaders };
+	return {
+		fillParams,
+		queryParamsForBuild,
+		pathValues,
+		secretParamNames,
+		secretParams,
+		hasQuerySecret,
+		hasPathSecrets,
+		redactPathSecret,
+		extraHeaders,
+	};
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // restGet
 // ═══════════════════════════════════════════════════════════════════
@@ -752,20 +801,21 @@ export async function restGet(
 	guide: ApiGuide,
 	opts?: RestGetOptions,
 ): Promise<RestGetResult> {
-	// Secret-owned path tokens: the store fills them BELOW the agent
-	// params map (see splitPathSecretParams).
-	const pathSecrets = opts?.secretPathParams ?? {};
-	const pathValues = Object.values(pathSecrets);
-	const hasPathSecrets = pathValues.length > 0;
-	const { fillParams, queryParamsForBuild } = splitPathSecretParams(
-		params,
-		pathSecrets,
-	);
+	const {
+		fillParams,
+		queryParamsForBuild,
+		pathValues,
+		secretParamNames,
+		secretParams,
+		hasQuerySecret,
+		hasPathSecrets,
+		redactPathSecret,
+		extraHeaders,
+	} = buildExecutorEnv(guide, params, opts);
 
-	// Steps 1/2 unchanged: fill path, build query (agent-supplied only —
-	// secret param names are excluded, incl. from the passthrough branch).
+	// Steps 1/2: fill path, build query (agent-supplied only — secret
+	// param names are excluded, incl. from the passthrough branch).
 	const resolvedPath = fillPathStrict(operation.path, fillParams);
-	const secretParamNames = opts?.secretQueryParamNames ?? new Set<string>();
 	const query = buildQueryParams(
 		operation,
 		queryParamsForBuild,
@@ -775,23 +825,11 @@ export async function restGet(
 	// 3. Auth dispatch.
 	checkAuth(guide.auth);
 
-	// Merge store-injected secret headers with literal auth.headers. The
-	// injected names are tracked for cross-domain redirect stripping. oauth2
-	// carries no literal headers (the resolved Bearer token arrives via
-	// opts.authHeaders).
-	const literalHeaders =
-		guide.auth.kind === "oauth2" ? undefined : guide.auth.headers;
-	const extraHeaders = { ...literalHeaders, ...opts?.authHeaders };
-
-	// 4. Build URL. Secret query params are injected BELOW the
-	// agent-supplied map — never into it — so the returned `params` stays
-	// agent-supplied-only. The fetch uses the raw URL; every surfaced copy
+	// 4. Build URL. The fetch uses the raw URL; every surfaced copy
 	// (result.url, the URL stored on HelperError.url) is redacted. Path
 	// secrets redact via redactSecretPathValues (value replace, raw +
 	// both hex forms); they ride the path, not the query, so
 	// redactSecretParams alone can't touch them.
-	const secretParams = opts?.secretQueryParams ?? {};
-	const hasQuerySecret = Object.keys(secretParams).length > 0;
 	const fetchUrlRaw = buildUrl(
 		apiHost,
 		resolvedPath,
@@ -808,11 +846,6 @@ export async function restGet(
 	//    for servers that omit a Content-Type charset (e.g. legacy Latin-1
 	//    APIs); an explicit header charset always wins.
 	const shape = operation.parse ?? guide.responseShape;
-	// Redaction closure for cross-domain redirect hops — built here where
-	// the values are already in scope; the transport stays value-agnostic.
-	const redactPathSecret = hasPathSecrets
-		? (u: string) => redactSecretPathValues(u, pathValues)
-		: undefined;
 	const result = await fetchWithOpts(fetchUrlRaw, {
 		accept,
 		extraHeaders,
@@ -934,13 +967,17 @@ export async function paginate(
 	// Auth dispatch — checked once up front (auth is constant per guide).
 	checkAuth(guide.auth);
 
-	// Merge store-injected secret headers with literal auth.headers once,
-	// reused for every page. Injected names are tracked for cross-domain
-	// redirect stripping. oauth2 carries no literal headers (the resolved
-	// Bearer token arrives via opts.authHeaders).
-	const literalHeaders =
-		guide.auth.kind === "oauth2" ? undefined : guide.auth.headers;
-	const extraHeaders = { ...literalHeaders, ...opts?.authHeaders };
+	const {
+		fillParams,
+		queryParamsForBuild,
+		pathValues,
+		secretParamNames,
+		secretParams,
+		hasQuerySecret,
+		hasPathSecrets,
+		redactPathSecret,
+		extraHeaders,
+	} = buildExecutorEnv(guide, params, opts);
 
 	// State for the styles.
 	let cursor: string | undefined;
@@ -969,20 +1006,8 @@ export async function paginate(
 		if (isNaN(page)) page = fallback;
 	}
 
-	// Secret-owned path tokens (see splitPathSecretParams): store fills
-	// below the agent params map, agent-supplied values dropped, and the
-	// query builder gets a deletion-only params copy (never the merged map).
-	const pathSecrets = opts?.secretPathParams ?? {};
-	const pathValues = Object.values(pathSecrets);
-	const hasPathSecrets = pathValues.length > 0;
-	const { fillParams, queryParamsForBuild } = splitPathSecretParams(
-		params,
-		pathSecrets,
-	);
-
 	// Compute effective params once — used for both per-page building and result transparency.
 	// Agent-supplied only (secret param names excluded, incl. passthrough).
-	const secretParamNames = opts?.secretQueryParamNames ?? new Set<string>();
 	const effectiveParams = buildQueryParams(
 		operation,
 		queryParamsForBuild,
@@ -1019,14 +1044,6 @@ export async function paginate(
 			effectiveParams[pagCfg.pageSizeParam] = String(pagCfg.pageSize);
 		}
 	}
-	// Secret query params injected below the agent map on every page's fetch URL.
-	const secretParams = opts?.secretQueryParams ?? {};
-	const hasQuerySecret = Object.keys(secretParams).length > 0;
-	// Redaction closure for cross-domain redirect hops — built once where
-	// the values are already in scope; the transport stays value-agnostic.
-	const redactPathSecret = hasPathSecrets
-		? (u: string) => redactSecretPathValues(u, pathValues)
-		: undefined;
 	const urls: string[] = [];
 
 	while (true) {

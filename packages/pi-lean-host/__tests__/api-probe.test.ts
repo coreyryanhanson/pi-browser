@@ -22,9 +22,9 @@ import {
 	probe,
 	formatProbeResult,
 	MAX_VERSION_WALK,
+	apiProbeTool,
 } from "../tools/api-probe.js";
 import { resolveProvisionedParentDomain as resolveProbeStoreDomain } from "../core/auth.js";
-import { apiProbeTool } from "../tools/index.js";
 import { Check } from "typebox/value";
 import {
 	writeSecret,

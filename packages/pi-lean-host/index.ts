@@ -1,14 +1,12 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import {
-	apiGuideTool,
-	apiFetchTool,
-	apiLearnTool,
-	apiProbeTool,
-	apiScaffoldTool,
-	apiStoreTool,
-	oauthMintTool,
-} from "./tools/index.js";
+import { apiGuideTool } from "./tools/api-guide.js";
+import { apiFetchTool } from "./tools/api-fetch.js";
+import { apiLearnTool } from "./tools/api-learn.js";
+import { apiProbeTool } from "./tools/api-probe.js";
+import { apiScaffoldTool } from "./tools/api-scaffold.js";
+import { apiStoreTool } from "./tools/api-store.js";
+import { oauthMintTool } from "./tools/oauth-mint.js";
 import initApiToggle from "./core/api-toggle.js";
 import { registerPortalProjection } from "./core/portal-projection.js";
 import { invalidateCache, loadAllGuides } from "./core/guide-store.js";

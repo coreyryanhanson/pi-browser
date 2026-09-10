@@ -19,7 +19,7 @@ export function contentText(
  * Append a dim-styled content preview to an in-progress result string,
  * with a "more chars" suffix when the content exceeds the given limit.
  */
-export function renderExpandedText(
+function renderExpandedText(
 	text: string,
 	theme: { fg: (c: ThemeColor, t: string) => string },
 	content: string,

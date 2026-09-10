@@ -38,7 +38,8 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { findGuidesByDomain } from "./guide-store.js";
 import { pickGuideForCommand } from "./guide-picker.js";
-import { pickWithDescription, type PickerItem } from "./select-picker.js";
+import type { SelectItem } from "@earendil-works/pi-tui";
+import { pickWithDescription } from "./select-picker.js";
 import {
 	buildSyntheticOAuth2Auth,
 	canonicalStoreDomain,
@@ -745,7 +746,7 @@ async function handleOauthInit(
  * assertions etc. must NOT grow wizard branches — this is a provisioning aid,
  * not an OAuth playground. Returns undefined when the user cancels/aborts.
  */
-const GRANT_ITEMS: PickerItem[] = [
+const GRANT_ITEMS: SelectItem[] = [
 	{
 		value: "client_credentials",
 		label: "client_credentials",
@@ -759,7 +760,7 @@ const GRANT_ITEMS: PickerItem[] = [
 	},
 ];
 
-const AUTH_METHOD_ITEMS: PickerItem[] = [
+const AUTH_METHOD_ITEMS: SelectItem[] = [
 	{
 		value: "client_secret_post",
 		label: "client_secret_post",

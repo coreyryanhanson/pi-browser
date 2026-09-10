@@ -61,8 +61,6 @@
 		"core/oauth-store.ts",
 		"core/oauth-command.ts",
 		"core/oauth-flow.ts",
-		"core/verify-ship-manifest.ts",
-		"tools/index.ts",
 		"tools/api-guide.ts",
 		"tools/api-fetch.ts",
 		"tools/api-learn.ts",

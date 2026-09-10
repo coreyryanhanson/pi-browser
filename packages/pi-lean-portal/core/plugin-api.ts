@@ -18,12 +18,18 @@ import type { AriaCachedNode } from "./shared/accessibility-tree.js";
 /**
  * Read-only capabilities that a plugin advertises.  The router uses
  * these to adapt behaviour (e.g. fall back from fullPage to viewport
- * screenshot when unsupported).
+ * screenshot when unsupported); the plugin contract suite also asserts
+ * them as part of the backend validation contract.
  */
 export interface PluginCapabilities {
 	supportsFullPageScreenshot: boolean;
 	supportsJavaScriptEvaluate: boolean;
-	/** Browser engine (used for display/debugging only) */
+	/**
+	 * Browser engine identity. Not read by the router — this is contract
+	 * surface: the plugin contract suite asserts it, and stealth backends
+	 * whose engine differs from their name must set it explicitly
+	 * (see bench/AGENTS.md).
+	 */
 	engine: "chromium" | "firefox" | "webkit" | string;
 }
 
@@ -145,14 +151,6 @@ export interface ClearCookiesOptions {
 	path?: string;
 }
 
-export interface StorageStateResult extends ResultBase {
-	cookies: Cookie[];
-	origins: Array<{
-		origin: string;
-		localStorage: Array<{ name: string; value: string }>;
-	}>;
-}
-
 // ─── BrowserPlugin Interface ──────────────────────────────────────
 
 /**
@@ -218,12 +216,6 @@ export interface BrowserPlugin {
 		taskId: string,
 		options?: ClearCookiesOptions,
 	): Promise<ResultBase>;
-
-	/**
-	 * Get the full storage state (cookies + localStorage + IndexedDB).
-	 * Primarily used by storage-state persistence.
-	 */
-	getStorageState(taskId: string): Promise<StorageStateResult>;
 
 	// ── Interaction ───────────────────────────────────────────
 

@@ -220,6 +220,14 @@
 
 ### Changed
 
+- **`pi-lean-portal` — `BrowserPlugin.getStorageState` removed from the
+  plugin interface** — it had no production caller: profile persistence
+  routes through the shared `persistSessionState()` helper, and the
+  Python adapter talks to the `browser.getStorageState` RPC directly.
+  Custom Node backends in `user-backends/` should drop the method from
+  their implementation. Nothing else changes — cookies keep their own
+  `getCookies`/`addCookies`/`clearCookies` methods.
+
 - **`pi-lean-search` — unconfigured-SearXNG startup notice** — when
   `searxng.url` is unset, the `search` status bar slot stays hidden
   (existing behavior) but a one-time warning notify now fires on Pi

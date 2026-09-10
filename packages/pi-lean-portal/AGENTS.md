@@ -31,7 +31,7 @@ getCookies, addCookies, clearCookies  — cookie operations
 getStorageState     — profile storage for session restore
 ```
 
-The 12 registered tools map to 12 tool-facing plugin methods. The cookie/storage methods (`getCookies`, `addCookies`, `clearCookies`, `getStorageState`) are router-facing, not tool-mapped. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 19 methods (18 required + 1 optional).
+The 12 registered tools map to 12 tool-facing plugin methods. The cookie/storage methods (`getCookies`, `addCookies`, `clearCookies`) are router-facing, and the profile-persistence methods (`getStorageState`) are backend-internal — the shared `persistSessionState()` helper in `core/shared/storage-state.ts` owns the save path. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 18 methods (all required).
 
 Capabilities (`PluginCapabilities`) advertise quirks. The router checks them at dispatch time.
 

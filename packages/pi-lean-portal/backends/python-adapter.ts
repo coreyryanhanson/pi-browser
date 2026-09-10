@@ -29,7 +29,6 @@ import {
 	type Cookie,
 	type CookieResult,
 	type ClearCookiesOptions,
-	type StorageStateResult,
 	type ResultBase,
 } from "../core/plugin-api.js";
 import type { AriaCachedNode } from "../core/shared/accessibility-tree.js";
@@ -1002,20 +1001,6 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				...(raw.error !== undefined ? { error: raw.error as string } : {}),
 			}),
 			(error) => ({ success: false, error }),
-		);
-	}
-
-	async getStorageState(taskId: string): Promise<StorageStateResult> {
-		return this._rpcCallTyped(
-			"browser.getStorageState",
-			{ taskId },
-			(raw) => ({
-				success: !!raw.success,
-				cookies: (raw.cookies as StorageStateResult["cookies"]) ?? [],
-				origins: (raw.origins as StorageStateResult["origins"]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
-			}),
-			(error) => ({ success: false, cookies: [], origins: [], error }),
 		);
 	}
 

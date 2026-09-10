@@ -52,8 +52,6 @@ export interface ExtractResult {
 interface CorrelatedResult {
 	/** Formatted text output with @e annotations */
 	text: string;
-	/** Number of matched refs */
-	matchedRefs: number;
 	/** Whether a staleness notice was appended */
 	staleCache: boolean;
 }
@@ -242,10 +240,7 @@ export async function runExtractor(
 
 		// Check for script-level error
 		if (parsed.error) {
-			console.warn(
-				"[pi-lean-portal] DOM extractor script error:",
-				parsed.error,
-			);
+			console.warn("[pi-lean-portal] DOM extractor script error:", parsed.error);
 			return { ok: false, error: parsed.error };
 		}
 
@@ -407,7 +402,6 @@ export function correlateElements(
 
 	return {
 		text,
-		matchedRefs: matchedRefs.size,
 		staleCache,
 	};
 }
@@ -453,9 +447,7 @@ export function queryElementCache(
 
 	// ref lookup: direct map access (cache keys are "e5" not "@e5")
 	if (filters.ref) {
-		const key = filters.ref.startsWith("@")
-			? filters.ref.slice(1)
-			: filters.ref;
+		const key = filters.ref.startsWith("@") ? filters.ref.slice(1) : filters.ref;
 		const node = cache.get(key);
 		if (node) {
 			// Apply additional filters if any
@@ -469,11 +461,7 @@ export function queryElementCache(
 					status.refFilteredOut = { node, filter: "name", value: filters.name };
 				return [];
 			}
-			if (
-				filters.subtree &&
-				subtreeAncestors &&
-				!subtreeAncestors.has(node.ref)
-			) {
+			if (filters.subtree && subtreeAncestors && !subtreeAncestors.has(node.ref)) {
 				if (status)
 					status.refFilteredOut = {
 						node,
@@ -605,7 +593,5 @@ export function formatRoleCountSummary(
 		parts.push(`${count} ${icon}${role}${count > 1 ? "s" : ""}`);
 	}
 
-	return (
-		parts.join(", ") + ". Use role=, name=, or text=true to query further."
-	);
+	return parts.join(", ") + ". Use role=, name=, or text=true to query further.";
 }

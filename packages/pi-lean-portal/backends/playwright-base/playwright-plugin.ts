@@ -46,7 +46,6 @@ import type {
 	Cookie,
 	CookieResult,
 	ClearCookiesOptions,
-	StorageStateResult,
 } from "../../core/plugin-api.js";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -1075,41 +1074,6 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 				};
 			}
 		});
-	}
-
-	async getStorageState(taskId: string): Promise<StorageStateResult> {
-		const entry = this.requireEntry(taskId, "getStorageState");
-		if (!entry) {
-			return {
-				success: false,
-				cookies: [],
-				origins: [],
-				error: "No active session",
-			};
-		}
-
-		return this._logOp(
-			"getStorageState",
-			{ taskId },
-			async () => {
-				try {
-					const state = await entry.context.storageState();
-					return {
-						success: true,
-						cookies: state.cookies,
-						origins: state.origins,
-					};
-				} catch (err: unknown) {
-					return {
-						success: false,
-						cookies: [],
-						origins: [],
-						error: err instanceof Error ? err.message : String(err),
-					};
-				}
-			},
-			(r) => ({ cookies: r.cookies.length, origins: r.origins.length }),
-		);
 	}
 
 	// ── Per-task cleanup ───────────────────────────────────────

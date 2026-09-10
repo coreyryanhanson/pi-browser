@@ -633,9 +633,7 @@ export function runContractTests(
 			_it("accepts optional urls filter", async () => {
 				await plugin.navigate("https://example.com/", TASK_ID, 30_000);
 
-				const result = await plugin.getCookies(TASK_ID, [
-					"https://example.com",
-				]);
+				const result = await plugin.getCookies(TASK_ID, ["https://example.com"]);
 
 				expect(result).toBeDefined();
 				expect(typeof result.success).toBe("boolean");
@@ -699,32 +697,6 @@ export function runContractTests(
 			});
 		});
 
-		describe("getStorageState()", () => {
-			_it("returns a StorageStateResult with required fields", async () => {
-				await plugin.navigate("https://example.com/", TASK_ID, 30_000);
-
-				const result = await plugin.getStorageState(TASK_ID);
-
-				expect(result).toBeDefined();
-				expect(typeof result.success).toBe("boolean");
-				expect(Array.isArray(result.cookies)).toBe(true);
-				expect(Array.isArray(result.origins)).toBe(true);
-
-				if (result.success) {
-					for (const c of result.cookies) {
-						expect(typeof c.name).toBe("string");
-						expect(typeof c.value).toBe("string");
-					}
-					for (const o of result.origins) {
-						expect(typeof o.origin).toBe("string");
-						expect(Array.isArray(o.localStorage)).toBe(true);
-					}
-				} else {
-					expect(result.error).toBeTruthy();
-				}
-			});
-		});
-
 		// ─── Cleanup ────────────────────────────────────────
 
 		describe("cleanup()", () => {
@@ -785,28 +757,21 @@ export function runContractTests(
 				expect(result.url).toContain("/simple");
 			});
 
-			_it(
-				"returns a snapshot with @e refs for interactive elements",
-				async () => {
-					const result = await plugin.navigate(
-						`${server.url}/interactive`,
-						TASK_ID,
-						navigateTimeout,
-					);
-
-					expect(result.success).toBe(true);
-					expect(result.snapshot).toBeTruthy();
-					// Interactive page should have at least some elements
-					expect(result.elementCount).toBeGreaterThan(0);
-				},
-			);
-
-			_it("follows redirects", async () => {
+			_it("returns a snapshot with @e refs for interactive elements", async () => {
 				const result = await plugin.navigate(
-					server.url,
+					`${server.url}/interactive`,
 					TASK_ID,
 					navigateTimeout,
 				);
+
+				expect(result.success).toBe(true);
+				expect(result.snapshot).toBeTruthy();
+				// Interactive page should have at least some elements
+				expect(result.elementCount).toBeGreaterThan(0);
+			});
+
+			_it("follows redirects", async () => {
+				const result = await plugin.navigate(server.url, TASK_ID, navigateTimeout);
 
 				expect(result.success).toBe(true);
 				expect(result.url).toContain("/simple");
@@ -869,11 +834,7 @@ export function runContractTests(
 		it.runIf(navigationSettle)(
 			"clicks a link with delayed navigation and returns consistent URL/snapshot",
 			async () => {
-				await plugin.navigate(
-					`${server.url}/slow-nav`,
-					TASK_ID,
-					navigateTimeout,
-				);
+				await plugin.navigate(`${server.url}/slow-nav`, TASK_ID, navigateTimeout);
 
 				const snap = await plugin.snapshot(TASK_ID);
 				expect(snap.success).toBe(true);
@@ -952,9 +913,7 @@ export function runContractTests(
 				const snap = await plugin.snapshot(TASK_ID);
 				expect(snap.success).toBe(true);
 
-				const linkMatch = snap.snapshot.match(
-					/@(e\d+)\b.*?link.*?Go to Page B/,
-				);
+				const linkMatch = snap.snapshot.match(/@(e\d+)\b.*?link.*?Go to Page B/);
 				expect(linkMatch).toBeTruthy();
 				if (!linkMatch) return;
 
@@ -997,9 +956,7 @@ export function runContractTests(
 				const result = await plugin.screenshot(TASK_ID);
 
 				expect(result.success).toBe(true);
-				expect(result.dataUri).toMatch(
-					/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/,
-				);
+				expect(result.dataUri).toMatch(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/);
 				// Should have reasonable base64 length (at least a few KB)
 				const base64 = result.dataUri.split(",")[1]!;
 				expect(base64.length).toBeGreaterThan(100);
@@ -1010,11 +967,7 @@ export function runContractTests(
 
 		describe("console — real capture", () => {
 			_it("captures console messages from the page", async () => {
-				await plugin.navigate(
-					`${server.url}/console`,
-					TASK_ID,
-					navigateTimeout,
-				);
+				await plugin.navigate(`${server.url}/console`, TASK_ID, navigateTimeout);
 
 				const result = await plugin.getConsoleMessages(TASK_ID);
 
@@ -1022,17 +975,13 @@ export function runContractTests(
 				expect(result.messages.length).toBeGreaterThan(0);
 
 				const texts = result.messages.map((m: { text: string }) => m.text);
-				expect(
-					texts.some((t: string) => t.includes("hello from console")),
-				).toBe(true);
+				expect(texts.some((t: string) => t.includes("hello from console"))).toBe(
+					true,
+				);
 			});
 
 			_it("clears console messages", async () => {
-				await plugin.navigate(
-					`${server.url}/console`,
-					TASK_ID,
-					navigateTimeout,
-				);
+				await plugin.navigate(`${server.url}/console`, TASK_ID, navigateTimeout);
 
 				await plugin.clearConsole(TASK_ID);
 
@@ -1106,11 +1055,7 @@ export function runContractTests(
 
 				await plugin.navigate(`${server.url}/simple`, TASK_A, navigateTimeout);
 
-				await plugin.navigate(
-					`${server.url}/interactive`,
-					TASK_B,
-					navigateTimeout,
-				);
+				await plugin.navigate(`${server.url}/interactive`, TASK_B, navigateTimeout);
 
 				// Each session should have its own snapshot
 				const snapA = await plugin.snapshot(TASK_A);

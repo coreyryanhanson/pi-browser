@@ -271,7 +271,6 @@ describe("correlateElements()", () => {
 			true,
 		);
 		expect(result.text).toContain("@e1");
-		expect(result.matchedRefs).toBe(1);
 		expect(result.staleCache).toBe(false);
 	});
 
@@ -315,7 +314,6 @@ describe("correlateElements()", () => {
 			true,
 		);
 		expect(result.text).toContain("@e5, @e12");
-		expect(result.matchedRefs).toBe(2);
 	});
 
 	it("no match produces text without annotations", () => {
@@ -333,7 +331,6 @@ describe("correlateElements()", () => {
 			true,
 		);
 		expect(result.text).not.toContain("@e");
-		expect(result.matchedRefs).toBe(0);
 	});
 
 	it("cache is fresh — no staleness notice", () => {
@@ -451,7 +448,6 @@ describe("correlateElements()", () => {
 			true,
 		);
 		expect(result.text).not.toContain("@e");
-		expect(result.matchedRefs).toBe(0);
 	});
 });
 
@@ -961,7 +957,6 @@ describe("router.browserInspect()", () => {
 			);
 			expect(result.text).toContain("No extractable content");
 			expect(result.text.length).toBeGreaterThan(0);
-			expect(result.matchedRefs).toBe(0);
 			expect(result.staleCache).toBe(false);
 		});
 

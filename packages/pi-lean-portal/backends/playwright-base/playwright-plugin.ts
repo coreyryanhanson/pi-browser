@@ -51,11 +51,10 @@ import type {
 
 // ─── Types ────────────────────────────────────────────────────────
 
-/** A per-task page entry: isolated BrowserContext + Page + optional profile name. */
+/** A per-task page entry: isolated BrowserContext + Page. */
 type PageEntry = {
 	context: BrowserContext;
 	page: Page;
-	profileName?: string;
 };
 
 // ─── PlaywrightPluginBase ─────────────────────────────────────────
@@ -204,9 +203,7 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		let page: Page | undefined;
 		try {
 			page = await this._browser!.newPage();
-			this._cachedUA = (await page.evaluate(
-				() => navigator.userAgent,
-			)) as string;
+			this._cachedUA = (await page.evaluate(() => navigator.userAgent)) as string;
 		} catch {
 			// Swallow — fallback to this.userAgent
 		} finally {
@@ -227,8 +224,6 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		taskId: string,
 		options?: {
 			storageState?: unknown;
-			profileName?: string;
-			profileMode?: "none" | "session" | "named";
 		},
 	): Promise<{
 		context: BrowserContext;
@@ -268,14 +263,7 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		const context = await this._newBrowserContext(effectiveStorageState);
 		const page = await context.newPage();
 
-		const pageEntry: {
-			context: BrowserContext;
-			page: Page;
-			profileName?: string;
-		} = { context, page };
-		if (options?.profileName) {
-			pageEntry.profileName = options.profileName;
-		}
+		const pageEntry: PageEntry = { context, page };
 		this._pages.set(taskId, pageEntry);
 		installDialogHandlers(taskId, page);
 		this._elementCache.set(taskId, new Map());
@@ -506,22 +494,14 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		options?: {
 			signal?: AbortSignal;
 			storageState?: unknown;
-			profileName?: string;
-			profileMode?: "none" | "session" | "named";
 		},
 	): Promise<NavigateResult> {
 		try {
 			const ctxOpts: {
 				storageState?: unknown;
-				profileName?: string;
-				profileMode?: "none" | "session" | "named";
 			} = {};
 			if (options?.storageState !== undefined)
 				ctxOpts.storageState = options.storageState;
-			if (options?.profileName !== undefined)
-				ctxOpts.profileName = options.profileName;
-			if (options?.profileMode !== undefined)
-				ctxOpts.profileMode = options.profileMode;
 			const { page } = await this.getOrCreateContext(taskId, ctxOpts);
 
 			// Wire up abort
@@ -694,9 +674,7 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		taskId: string,
 		ref: string,
 		op: string,
-	):
-		| { page: Page; locator: Locator; node: AriaCachedNode }
-		| InteractionResult {
+	): { page: Page; locator: Locator; node: AriaCachedNode } | InteractionResult {
 		const page = this.requirePage(taskId, op);
 		if (!page) {
 			return { success: false, error: "No active session" };

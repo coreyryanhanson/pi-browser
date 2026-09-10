@@ -193,15 +193,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	private _elementCaches = new Map<string, Map<string, AriaCachedNode>>();
 
 	/**
-	 * Per-taskId page metadata.
-	 * Used to track profile names for storage state save on cleanup.
+	 * TaskIds with a live page session in the bridge.
 	 */
-	private _pages = new Map<
-		string,
-		{
-			profileName?: string;
-		}
-	>();
+	private _pages = new Set<string>();
 
 	/**
 	 * @param name  Unique plugin identifier (e.g. "chromium-py").
@@ -212,9 +206,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 
 		// Validate bridge script exists
 		if (!config.bridgeScript) {
-			throw new Error(
-				`PythonPluginAdapter('${name}'): bridgeScript is required`,
-			);
+			throw new Error(`PythonPluginAdapter('${name}'): bridgeScript is required`);
 		}
 		if (!existsSync(config.bridgeScript)) {
 			throw new Error(
@@ -268,7 +260,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	 * Clean up ALL resources.  Closes all pages, then sends ``shutdown`` to the bridge.
 	 */
 	async cleanupAll(): Promise<void> {
-		for (const taskId of [...this._pages.keys()]) {
+		for (const taskId of [...this._pages]) {
 			await this.cleanup(taskId).catch(() => {});
 		}
 		await this._stopProcess();
@@ -699,21 +691,14 @@ export class PythonPluginAdapter implements BrowserPlugin {
 		options?: {
 			signal?: AbortSignal;
 			storageState?: unknown;
-			profileName?: string;
-			profileMode?: "none" | "session" | "named";
 		},
 	): Promise<NavigateResult> {
 		// AbortSignal not wired through JSON-RPC; accepted for interface compatibility.
 
 		try {
-			// Build RPC params — include storageState and profileName if provided
 			const rpcParams: Record<string, unknown> = { url, taskId, timeoutMs };
 			if (options?.storageState !== undefined) {
 				rpcParams.storageState = options.storageState;
-			}
-			if (options?.profileName !== undefined) {
-				rpcParams.profileName = options.profileName;
-				rpcParams.profileMode = options.profileMode ?? "named";
 			}
 
 			// ── Persist state before re-navigate (if session exists) ──
@@ -737,11 +722,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			const success = !!result.success;
 
 			// Track this task for cleanup
-			const pageMeta: { profileName?: string } = {};
-			if (options?.profileName) {
-				pageMeta.profileName = options.profileName;
-			}
-			this._pages.set(taskId, pageMeta);
+			this._pages.add(taskId);
 
 			// Update session manager
 			if (success) {
@@ -871,8 +852,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	): Promise<ScreenshotResult> {
 		// If capabilities don't support fullPage, never pass it
 		const fullPage =
-			this.capabilities.supportsFullPageScreenshot &&
-			options?.fullPage === true;
+			this.capabilities.supportsFullPageScreenshot && options?.fullPage === true;
 
 		return this._rpcCallTyped(
 			"browser.screenshot",
@@ -960,8 +940,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				skip_default_viewport: !!raw.skip_default_viewport,
 				skip_networkidle: !!raw.skip_networkidle,
 				wrap_mw_eval_in_eval: !!raw.wrap_mw_eval_in_eval,
-				csp_safe_readonly_via_init_script:
-					!!raw.csp_safe_readonly_via_init_script,
+				csp_safe_readonly_via_init_script: !!raw.csp_safe_readonly_via_init_script,
 			}),
 			(error): QuirksDescriptor => ({
 				success: false,
@@ -1045,8 +1024,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	// ═════════════════════════════════════════════════════════════════
 
 	async cleanup(taskId: string): Promise<void> {
-		const pageEntry = this._pages.get(taskId);
-		if (!pageEntry) {
+		if (!this._pages.has(taskId)) {
 			this._elementCaches.delete(taskId);
 			return;
 		}

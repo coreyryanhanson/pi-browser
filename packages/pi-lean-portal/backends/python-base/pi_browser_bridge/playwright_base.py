@@ -44,30 +44,31 @@ import re
 import sys
 import time
 import traceback
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import unquote as _urlunquote
 
+from .accessibility import AriaParseResult, build_locator_args, parse_snapshot
 from .bot_detection import check_bot_detection
-from .accessibility import parse_snapshot, build_locator_args, AriaParseResult
 from .browser_data import NAV_SETTLE
 from .transport import (
+    INVALID_PARAMS,
+    METHOD_NOT_FOUND,
+    SESSION_ERROR,
+    InvalidRequestError,
+    make_application_error,
+    make_error_response,
+    make_invalid_request,
+    make_parse_error,
+    make_success_response,
     read_request,
     write_response,
-    make_success_response,
-    make_error_response,
-    make_parse_error,
-    make_invalid_request,
-    make_application_error,
-    InvalidRequestError,
-    METHOD_NOT_FOUND,
-    INVALID_PARAMS,
-    SESSION_ERROR,
 )
 
 # ─── Playwright import (lazy, for better error messages) ──────────────
 
 try:
-    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout  # type: ignore[import-unresolved]
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+    from playwright.sync_api import sync_playwright  # type: ignore[import-unresolved]
 
     HAS_PLAYWRIGHT = True
 except ImportError:
@@ -370,7 +371,7 @@ class PlaywrightBridge:
 
     # ── Session helpers ─────────────────────────────────────────
 
-    def get_session(self, task_id: str) -> Optional[dict[str, Any]]:
+    def get_session(self, task_id: str) -> dict[str, Any] | None:
         """Get the session data for a task, or None."""
         return self.sessions.get(task_id)
 
@@ -384,7 +385,7 @@ class PlaywrightBridge:
         return session
 
     def ensure_session(
-        self, task_id: str, config: Optional[dict[str, Any]] = None
+        self, task_id: str, config: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Get or create a session for the given task."""
         session = self.get_session(task_id)
@@ -394,7 +395,7 @@ class PlaywrightBridge:
         self.sessions[task_id] = new_session
         return new_session
 
-    def get_element_cache(self, task_id: str) -> Optional[AriaParseResult]:
+    def get_element_cache(self, task_id: str) -> AriaParseResult | None:
         """Get the cached element parse result for a task, or None."""
         return self.element_caches.get(task_id)
 
@@ -1038,9 +1039,7 @@ class PlaywrightBridge:
         task_id: str,
         url: str,
         timeout_ms: int = 30_000,
-        storageState: Optional[dict[str, Any]] = None,
-        profileName: Optional[str] = None,
-        profileMode: Optional[str] = None,
+        storageState: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Navigate the browser to a URL.
 
@@ -1049,8 +1048,7 @@ class PlaywrightBridge:
 
         Named profiles are handled by the TypeScript side
         (``python-adapter.ts`` pre-loads ``storageState`` before
-        navigate), so the Python bridge always creates isolated
-        sessions regardless of ``profileName``/``profileMode``.
+        navigate), so the bridge always creates isolated sessions.
 
         If ``storageState`` is provided, it is passed to the context
         creation so saved cookies and localStorage are restored.
@@ -1064,7 +1062,7 @@ class PlaywrightBridge:
         page: Any = session["page"]
 
         # ── Navigate (with retry on transient errors) ───────────
-        last_error: Optional[str] = None
+        last_error: str | None = None
         for attempt in range(2):
             try:
                 page.goto(url, wait_until="load", timeout=timeout_ms)
@@ -1331,8 +1329,8 @@ class PlaywrightBridge:
                 page.go_back(wait_until="networkidle")
             time.sleep(0.3)
 
-            new_url: Optional[str] = None
-            new_title: Optional[str] = None
+            new_url: str | None = None
+            new_title: str | None = None
             try:
                 new_url = page.url
                 new_title = page.title()
@@ -1578,7 +1576,7 @@ class PlaywrightBridge:
     # ── Cookies & storage state ─────────────────────────────────
 
     def do_get_cookies(
-        self, task_id: str, urls: Optional[list[str]] = None
+        self, task_id: str, urls: list[str] | None = None
     ) -> dict[str, Any]:
         try:
             session = self.require_session(task_id)
@@ -1620,9 +1618,9 @@ class PlaywrightBridge:
     def do_clear_cookies(
         self,
         task_id: str,
-        name: Optional[str] = None,
-        domain: Optional[str] = None,
-        path: Optional[str] = None,
+        name: str | None = None,
+        domain: str | None = None,
+        path: str | None = None,
     ) -> dict[str, Any]:
         try:
             session = self.require_session(task_id)
@@ -1690,8 +1688,6 @@ class PlaywrightBridge:
             url,
             timeout_ms,
             storageState=params.get("storageState"),
-            profileName=params.get("profileName"),
-            profileMode=params.get("profileMode"),
         )
         return make_success_response(cmd_id, result)
 

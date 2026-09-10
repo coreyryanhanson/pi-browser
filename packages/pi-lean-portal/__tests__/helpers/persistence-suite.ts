@@ -138,10 +138,7 @@ export function runPersistenceSuite(
 			});
 
 			it(`${name}: navigates with a named profile — consent dialog is visible`, async () => {
-				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout, {
-					profileName: TEST_PROFILE,
-					profileMode: "named",
-				});
+				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout);
 				expect(nav.success).toBe(true);
 				expect(nav.title).toContain("Cookie Persistence Test");
 				expect(nav.snapshot).toContain("Consent");
@@ -178,10 +175,7 @@ export function runPersistenceSuite(
 			});
 
 			it(`${name}: navigates again with same profile — consent dialog does NOT reappear`, async () => {
-				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout, {
-					profileName: TEST_PROFILE,
-					profileMode: "named",
-				});
+				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout);
 				expect(nav.success).toBe(true);
 
 				// Consent dialog should NOT be present — cookies survived in-context
@@ -202,10 +196,7 @@ export function runPersistenceSuite(
 			});
 
 			it(`${name}: third navigate also has no consent dialog (persistence confirmed)`, async () => {
-				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout, {
-					profileName: TEST_PROFILE,
-					profileMode: "named",
-				});
+				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout);
 				expect(nav.success).toBe(true);
 
 				// Dialog should still be absent

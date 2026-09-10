@@ -485,18 +485,18 @@ export async function navigate(
 	sessionManager.updateSession(taskId, {
 		currentUrl: normalizedUrl,
 		persistState: resolvedProfileName !== undefined,
-		...(options.piSessionId !== undefined
-			? { piSessionId: options.piSessionId }
-			: {}),
+		...(options.piSessionId === undefined
+			? {}
+			: { piSessionId: options.piSessionId }),
 	});
 
 	// Set/clear profileName directly
 	const session = sessionManager.getSession(taskId)!;
 	if (session) {
-		if (resolvedProfileName !== undefined) {
-			session.profileName = resolvedProfileName;
-		} else {
+		if (resolvedProfileName === undefined) {
 			delete session.profileName;
+		} else {
+			session.profileName = resolvedProfileName;
 		}
 	}
 
@@ -506,16 +506,10 @@ export async function navigate(
 	const navOptions: {
 		signal?: AbortSignal;
 		storageState?: unknown;
-		profileName?: string;
-		profileMode?: "none" | "session" | "named";
 	} = {};
 	if (options.signal) navOptions.signal = options.signal;
 	if (loadedStorageState !== undefined) {
 		navOptions.storageState = loadedStorageState;
-	}
-	if (resolvedProfileName !== undefined) {
-		navOptions.profileName = resolvedProfileName;
-		navOptions.profileMode = profileMode;
 	}
 	const result = await plugin.navigate(
 		normalizedUrl,
@@ -716,9 +710,7 @@ export async function scroll(
 	taskId: string | undefined,
 	direction: "up" | "down",
 ): Promise<InteractionResult> {
-	return wrapInteraction(taskId, (plugin, tid) =>
-		plugin.scroll(tid, direction),
-	);
+	return wrapInteraction(taskId, (plugin, tid) => plugin.scroll(tid, direction));
 }
 
 export async function goBack(taskId?: string): Promise<InteractionResult> {
@@ -930,7 +922,7 @@ export async function browserInspect(
 
 		// maxChars truncation — default ~2500 when not specified
 		const effectiveMaxChars =
-			params.maxChars !== undefined ? params.maxChars : INSPECT_DEFAULT_LIMIT;
+			params.maxChars === undefined ? INSPECT_DEFAULT_LIMIT : params.maxChars;
 		if (effectiveMaxChars > 0 && content.length > effectiveMaxChars) {
 			const remaining = content.length - effectiveMaxChars;
 			content =
@@ -963,10 +955,10 @@ export async function browserInspect(
 		const filtered = queryElementCache(
 			cache!,
 			{
-				...(params.role !== undefined ? { role: params.role } : {}),
-				...(params.name !== undefined ? { name: params.name } : {}),
-				...(params.ref !== undefined ? { ref: params.ref } : {}),
-				...(params.subtree !== undefined ? { subtree: params.subtree } : {}),
+				...(params.role === undefined ? {} : { role: params.role }),
+				...(params.name === undefined ? {} : { name: params.name }),
+				...(params.ref === undefined ? {} : { ref: params.ref }),
+				...(params.subtree === undefined ? {} : { subtree: params.subtree }),
 			},
 			status,
 		);
@@ -980,7 +972,7 @@ export async function browserInspect(
 				`filter ${filter}="${value}". Drop the ${filter} filter or adjust it.`;
 		} else {
 			content = formatElementList(filtered, {
-				...(params.ref !== undefined ? { ref: params.ref } : {}),
+				...(params.ref === undefined ? {} : { ref: params.ref }),
 			});
 		}
 

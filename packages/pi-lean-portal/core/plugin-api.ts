@@ -195,10 +195,6 @@ export interface BrowserPlugin {
 			signal?: AbortSignal;
 			/** Playwright storage state for profile-based session restoration */
 			storageState?: unknown;
-			/** Profile name for shared-context resolution */
-			profileName?: string;
-			/** Profile mode for shared-context resolution */
-			profileMode?: "none" | "session" | "named";
 		},
 	): Promise<NavigateResult>;
 

@@ -1,5 +1,9 @@
+import { getProfileLabel } from "./storage-state.js";
+
 /**
  * Session manager — tracks browser session lifecycle per task_id.
+
+
  *
  * Design: sessions track metadata; browsers and contexts are managed
  * entirely by the plugin. The session manager is Playwright-agnostic.
@@ -213,9 +217,8 @@ class SessionManager {
  * "ephemeral" (no profile) label shows as-is.
  */
 function profileDisplayName(name: string): string {
-	if (name.startsWith("_session-")) return "📋 session";
 	if (name === "ephemeral") return "ephemeral";
-	return name;
+	return getProfileLabel(name);
 }
 
 function extractDomain(url: string): string {

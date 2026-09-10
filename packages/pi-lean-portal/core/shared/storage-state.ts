@@ -491,7 +491,17 @@ export async function persistSessionState(
 }
 
 /**
+ * Get a human-readable label for a profile name.
+ * Session-scoped profiles render as "📋 session"; others show their name.
+ */
+export function getProfileLabel(name: string): string {
+	if (isSessionProfile(name)) return "📋 session";
+	return name;
+}
+
+/**
  * Check whether a profile name follows the session-scoped naming convention.
+
  *
  * Session profiles start with `SESSION_PROFILE_PREFIX` (`_session-`) and
  * encode the pi session ID. They are auto-created for `profile="session"`

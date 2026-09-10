@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/web profile` restore now picks the newest choice, not the oldest** —
+  `restoreProfile()` in `browser-toggle.ts` returned on the **first**
+  `portal-conversation-state` entry found in the session branch, but
+  `getBranch()` walks chronologically root→leaf — so after switching
+  profiles mid-conversation (e.g. `/web profile work` →
+  `/web profile shopping`), a `/reload`, `/resume`, or branch switch via
+  `/tree` silently restored the **first** profile chosen in the session
+  instead of the most recent one. The loop now keeps walking and the last
+  valid entry wins, matching pi's own session-persistence convention
+  (last-writer-wins) and fixing restore on both `session_start` and
+  `session_tree`. Covered by a new regression test feeding two
+  chronological entries and asserting the newest wins.
+
 ### Added
 
 - **`pi-lean-host` — declarative REST API client package** — a new

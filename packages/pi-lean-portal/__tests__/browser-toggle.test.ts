@@ -310,6 +310,29 @@ describe("getConversationDefaultProfile", () => {
 	it("returns undefined initially", () => {
 		expect(getConversationDefaultProfile()).toBeUndefined();
 	});
+
+	it("restores the newest portal-conversation-state entry on session_start (last wins)", async () => {
+		const { pi, handlers } = mockPi();
+		browserToggle(pi);
+
+		const entry = (profile: string) => ({
+			type: "custom" as const,
+			customType: "portal-conversation-state",
+			data: { defaultProfile: profile },
+		});
+		// getBranch() walks chronologically root→leaf, oldest first.
+		const ctx = mockCtx({
+			sessionManager: {
+				getBranch: () => [entry("work"), entry("shopping")] as any[],
+			},
+		} as any);
+
+		for (const h of handlers.get("session_start")!) {
+			await h({}, ctx);
+		}
+
+		expect(getConversationDefaultProfile()).toBe("shopping");
+	});
 });
 
 // ==================================================================

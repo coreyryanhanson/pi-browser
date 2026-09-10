@@ -86,12 +86,13 @@ function persistProfile(pi: ExtensionAPI, profile: string): void {
 }
 
 function restoreProfile(_pi: ExtensionAPI, ctx: ExtensionContext): void {
+	// getBranch() is chronological root→leaf, so keep walking and the last
+	// entry wins (newest /web profile choice on /reload, /resume, /tree).
 	for (const entry of ctx.sessionManager.getBranch()) {
 		if (entry.type === "custom" && entry.customType === PROFILE_PERSIST_KEY) {
 			const data = entry.data as Record<string, unknown> | undefined;
 			if (data && typeof data.defaultProfile === "string") {
 				_conversationDefaultProfile = data.defaultProfile;
-				return;
 			}
 		}
 	}

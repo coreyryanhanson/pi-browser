@@ -34,8 +34,7 @@ export const browserInspectTool = defineTool({
 		),
 		name: Type.Optional(
 			Type.String({
-				description:
-					"Filter by accessible name (case-insensitive substring match)",
+				description: "Filter by accessible name (case-insensitive substring match)",
 			}),
 		),
 		ref: Type.Optional(
@@ -75,7 +74,7 @@ export const browserInspectTool = defineTool({
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 		const p = params as Record<string, unknown>;
-		const tid = (p?.taskId as string | undefined) ?? taskId(ctx);
+		const tid = taskId(ctx);
 
 		const result = await router.browserInspect(tid, {
 			...(p?.role !== undefined ? { role: p.role as string } : {}),

@@ -26,9 +26,8 @@ export const browserSnapshotTool = defineTool({
 	}),
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-		const p = params as { full?: boolean; taskId?: string };
-		const tid = p?.taskId ?? taskId(ctx);
-		const full = p?.full ?? false;
+		const tid = taskId(ctx);
+		const full = params?.full ?? false;
 		const result = await router.snapshot(tid, full);
 		updateFooterStatus(ctx);
 
@@ -64,8 +63,7 @@ export const browserSnapshotTool = defineTool({
 	},
 
 	renderResult(result, { expanded, isPartial }, theme, _context) {
-		if (isPartial)
-			return new Text(theme.fg("warning", "Taking snapshot…"), 0, 0);
+		if (isPartial) return new Text(theme.fg("warning", "Taking snapshot…"), 0, 0);
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error) return new Text(theme.fg("error", "Snapshot failed"), 0, 0);
 		const ec = (d?.elementCount as number) ?? 0;

@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **`browser-inspect` schema no longer promises unsupported `ref` +
+  `text=true` subtree scoping** — the `ref` description claimed that
+  combining it with `text=true` scopes the DOM walker to that element's
+  subtree, but `text=true` always extracts the whole page (`params.ref`
+  is only consumed on the element-query path). The description is
+  corrected; scoping remains a possible future feature.
+
 - **`/web profile` restore now picks the newest choice, not the oldest** —
   `restoreProfile()` in `browser-toggle.ts` returned on the **first**
   `portal-conversation-state` entry found in the session branch, but

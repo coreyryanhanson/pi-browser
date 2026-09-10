@@ -37,10 +37,12 @@ export const browserInspectTool = defineTool({
 				description: "Filter by accessible name (case-insensitive substring match)",
 			}),
 		),
+		// ponytail: ref+text=true subtree scoping is not implemented (text=true always
+		// extracts the whole page); thread ref through router browserInspect ->
+		// runExtractor -> EXTRACTOR_SCRIPT root element if it's ever needed.
 		ref: Type.Optional(
 			Type.String({
-				description:
-					"Look up a specific @e ref (e.g. 'e5'). When combined with text=true, scopes DOM walker to that element's subtree.",
+				description: "Look up a specific @e ref (e.g. 'e5').",
 			}),
 		),
 		subtree: Type.Optional(
@@ -77,13 +79,13 @@ export const browserInspectTool = defineTool({
 		const tid = taskId(ctx);
 
 		const result = await router.browserInspect(tid, {
-			...(p?.role !== undefined ? { role: p.role as string } : {}),
-			...(p?.name !== undefined ? { name: p.name as string } : {}),
-			...(p?.ref !== undefined ? { ref: p.ref as string } : {}),
-			...(p?.subtree !== undefined ? { subtree: p.subtree as string } : {}),
-			...(p?.text !== undefined ? { text: Boolean(p.text) } : {}),
-			...(p?.maxChars !== undefined ? { maxChars: p.maxChars as number } : {}),
-			...(p?.query !== undefined ? { query: p.query as string } : {}),
+			...(p?.role === undefined ? {} : { role: p.role as string }),
+			...(p?.name === undefined ? {} : { name: p.name as string }),
+			...(p?.ref === undefined ? {} : { ref: p.ref as string }),
+			...(p?.subtree === undefined ? {} : { subtree: p.subtree as string }),
+			...(p?.text === undefined ? {} : { text: Boolean(p.text) }),
+			...(p?.maxChars === undefined ? {} : { maxChars: p.maxChars as number }),
+			...(p?.query === undefined ? {} : { query: p.query as string }),
 		});
 
 		if (!result.success) {

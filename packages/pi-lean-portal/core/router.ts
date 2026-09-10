@@ -328,6 +328,25 @@ export function compactSnapshot(
 }
 
 /**
+ * Compose the compacted snapshot output block shared by all snapshot-bearing
+ * results: compacted tree + cache notice + fingerprint + optional dialog events.
+ */
+function renderSnapshotBlock(
+	raw: string,
+	elementCount: number,
+	fingerprint: string,
+	cacheResult: CacheResult | null,
+	dialogEvents?: DialogEvent[],
+): string {
+	return (
+		compactSnapshot(raw, elementCount) +
+		formatCacheNotice(cacheResult, raw.length, elementCount) +
+		`\nfingerprint:${fingerprint}` +
+		(dialogEvents ? formatDialogEvents(dialogEvents) : "")
+	);
+}
+
+/**
  * For interaction tools that use @e refs (click, type, press, scroll, goBack):
  * if the session was just auto-created, the old @e refs are stale, so we
  * return a fresh snapshot instead of performing the action.
@@ -354,7 +373,6 @@ async function refBasedInteractionOrSnapshot(
 			const session = sessionManager.getSession(taskId);
 
 			// Cache the auto-snapshot before compaction
-			const truncated = snap.snapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 			const fingerprint = snapshotFingerprint(snap.snapshot);
 			const cacheResult = cacheSnapshot(taskId, snap.snapshot, fingerprint);
 
@@ -362,14 +380,12 @@ async function refBasedInteractionOrSnapshot(
 				success: true,
 				snapshot:
 					"Page loaded interactively. Previous element references are stale. Use the following accessibility tree to interact:\n\n" +
-					compactSnapshot(snap.snapshot, snap.elementCount) +
-					formatCacheNotice(
-						cacheResult,
-						snap.snapshot.length,
-						truncated,
+					renderSnapshotBlock(
+						snap.snapshot,
 						snap.elementCount,
-					) +
-					`\nfingerprint:${fingerprint}`,
+						fingerprint,
+						cacheResult,
+					),
 				elementCount: snap.elementCount,
 				...(session?.currentUrl ? { newUrl: session.currentUrl } : {}),
 				...(session?.currentTitle ? { newTitle: session.currentTitle } : {}),
@@ -390,20 +406,15 @@ function compactInteractionResult(
 		const newFingerprint = snapshotFingerprint(rawSnapshot);
 
 		// Cache (before compacting)
-		const truncated = rawSnapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 		const cacheResult = cacheSnapshot(taskId, rawSnapshot, newFingerprint);
 
-		const compacted = compactSnapshot(rawSnapshot, result.elementCount);
-		result.snapshot =
-			compacted +
-			formatCacheNotice(
-				cacheResult,
-				rawSnapshot.length,
-				truncated,
-				result.elementCount,
-			) +
-			`\nfingerprint:${newFingerprint}` +
-			formatDialogEvents(result.dialogEvents ?? []);
+		result.snapshot = renderSnapshotBlock(
+			rawSnapshot,
+			result.elementCount,
+			newFingerprint,
+			cacheResult,
+			result.dialogEvents,
+		);
 
 		const session = sessionManager.getSession(taskId);
 		if (session) {
@@ -562,23 +573,19 @@ export async function navigate(
 
 		// --- Cache the raw snapshot before compaction ---
 		const rawSnapshot = result.snapshot;
-		const isTruncated = rawSnapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 		const cacheResult: CacheResult | null = rawSnapshot
 			? cacheSnapshot(taskId, rawSnapshot, fp)
 			: null;
 		// ---
 
-		const dialogContent = formatDialogEvents(result.dialogEvents ?? []);
 		const snapshotContent = rawSnapshot
-			? compactSnapshot(rawSnapshot, result.elementCount) +
-				formatCacheNotice(
-					cacheResult,
-					rawSnapshot.length,
-					isTruncated,
+			? renderSnapshotBlock(
+					rawSnapshot,
 					result.elementCount,
-				) +
-				`\nfingerprint:${fp}` +
-				dialogContent
+					fp,
+					cacheResult,
+					result.dialogEvents,
+				)
 			: "";
 
 		// Track cache population time for staleness detection
@@ -656,12 +663,12 @@ export async function snapshot(
 			});
 		}
 		if (!full) {
-			const rawLength = result.snapshot.length;
-			const wasTruncated = rawLength > SNAPSHOT_TRUNCATE_THRESHOLD;
-			result.snapshot =
-				compactSnapshot(result.snapshot, result.elementCount) +
-				formatCacheNotice(null, rawLength, wasTruncated, result.elementCount) +
-				`\nfingerprint:${fp}`;
+			result.snapshot = renderSnapshotBlock(
+				result.snapshot,
+				result.elementCount,
+				fp,
+				null,
+			);
 		}
 		result.snapshot += formatDialogEvents(result.dialogEvents ?? []);
 	}

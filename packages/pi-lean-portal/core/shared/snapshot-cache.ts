@@ -162,18 +162,17 @@ export function removeAllSnapshotFiles(): void {
  * the snapshot was not truncated.
  *
  * @param cacheResult - The result from cacheSnapshot() (null if not cached)
- * @param snapshotLength - The length of the original (uncached) snapshot
- * @param truncated - Whether the snapshot was truncated by compactSnapshot()
+ * @param snapshotLength - The length of the original (uncached) snapshot; a
+ *   value above SNAPSHOT_TRUNCATE_THRESHOLD means compactSnapshot() truncated it
  * @param elementCount - Optional number of interactive elements on the page
  * @returns A hint string (cache notice, fallback hint, or empty string)
  */
 export function formatCacheNotice(
 	cacheResult: CacheResult | null,
 	snapshotLength: number,
-	truncated: boolean,
 	elementCount?: number,
 ): string {
-	if (truncated && snapshotLength > SNAPSHOT_TRUNCATE_THRESHOLD) {
+	if (snapshotLength > SNAPSHOT_TRUNCATE_THRESHOLD) {
 		if (cacheResult) {
 			// Cache was written — show cache path + action guidance
 			const guidance =

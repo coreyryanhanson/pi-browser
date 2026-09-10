@@ -335,9 +335,7 @@ export async function webFetch(
 	let statusCode: number | undefined;
 
 	try {
-		const fetchResult = await performFetch(url, timeout, options.signal);
-		result = fetchResult;
-		statusCode = 200;
+		result = await performFetch(url, timeout, options.signal);
 	} catch (err: unknown) {
 		if (err instanceof DOMException && err.name === "AbortError") {
 			return {
@@ -394,26 +392,10 @@ export async function webFetch(
 	const tid = options.taskId ?? "web-fetch-default";
 	const { inline, filePath, totalChars } = capFetchContent(markdown, tid);
 
-	// Assemble result
-	const lines: string[] = [];
-	if (result.title) lines.push(`Title: ${result.title}`);
-	lines.push(`URL: ${url}`);
-	lines.push(
-		result.needsJavaScript
-			? "⚠ This page appears to need JavaScript for full rendering."
-			: "",
-	);
-	if (botDetected)
-		lines.push(
-			"⚠ Bot detection triggered, the page may be blocking automation. Try browser-navigate instead, ideally with a stealth backend if one is configured.",
-		);
-	lines.push(statusCode ? `HTTP ${statusCode}` : "");
-	lines.push("");
-
-	const headerLines = lines.filter(Boolean).join("\n");
+	// Header (Title/URL/warnings) is assembled by the web-fetch tool — content is Markdown only
 	const content = filePath
-		? `📄 Full content saved to ${filePath} (${formatBytes(totalChars)}). Use read with offset/limit to access specific sections — do not read the entire file at once.\n\n${headerLines}\n\n${inline}`
-		: `${headerLines}\n\n${inline}`;
+		? `📄 Full content saved to ${filePath} (${formatBytes(totalChars)}). Use read with offset/limit to access specific sections — do not read the entire file at once.\n\n${inline}`
+		: inline;
 
 	return {
 		success: true,
@@ -423,7 +405,6 @@ export async function webFetch(
 		backendUsed: "fetch",
 		...(result.needsJavaScript ? { needsJavaScript: true } : {}),
 		...(botDetected ? { botDetected: true } : {}),
-		...(statusCode !== undefined ? { statusCode } : {}),
 		...(filePath ? { filePath } : {}),
 		totalChars,
 	};

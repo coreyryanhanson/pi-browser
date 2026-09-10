@@ -65,7 +65,9 @@ export function parseSnapshot(snap: string): AriaParseResult {
 	for (const rawLine of lines) {
 		if (!rawLine.trim()) continue;
 
-		const depth = countLeadingSpaces(rawLine);
+		// Playwright's ariaSnapshot() emits 2 spaces per nesting level; index
+		// the parent stack by level, not raw space count.
+		const depth = Math.floor(countLeadingSpaces(rawLine) / 2);
 		const trimmed = rawLine.trim();
 
 		// Property lines (start with /) — pass through as-is

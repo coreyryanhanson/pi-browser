@@ -79,9 +79,7 @@ describe("parseSnapshot — occurrenceIndex", () => {
 describe("parseSnapshot — duplicate occurrences", () => {
 	it("assigns occurrenceIndex 0,1,2 for three identical links", () => {
 		const result = parseSnapshot(
-			['- link "Promoted"', '- link "Promoted"', '- link "Promoted"'].join(
-				"\n",
-			),
+			['- link "Promoted"', '- link "Promoted"', '- link "Promoted"'].join("\n"),
 		);
 		expect(result.count).toBe(3);
 		const els = allElements(result);
@@ -131,9 +129,7 @@ describe("parseSnapshot — duplicate occurrences", () => {
 	it("only counts interactive roles for occurrence tracking", () => {
 		// Informational roles like "paragraph" don't get @e refs
 		const result = parseSnapshot(
-			['- paragraph "text"', '- link "Promoted"', '- link "Promoted"'].join(
-				"\n",
-			),
+			['- paragraph "text"', '- link "Promoted"', '- link "Promoted"'].join("\n"),
 		);
 		expect(result.count).toBe(2);
 		expect(result.elements.get("e1")!.occurrenceIndex).toBe(0);
@@ -196,6 +192,66 @@ describe("parseSnapshot text format", () => {
 });
 
 // ─── snapshotFingerprint ─────────────────────────────────────────
+
+describe("parseSnapshot — nested hierarchy and parentRef", () => {
+	// Matches Playwright's ariaSnapshot() output: 2 spaces per nesting level.
+	const nested = [
+		"- banner:",
+		'  - link "Home":',
+		"    - /url: /",
+		'  - link "About":',
+		"    - /url: /about",
+		"- main:",
+		'  - button "Submit"',
+	].join("\n");
+
+	it("assigns parentRef to the nearest interactive ancestor", () => {
+		const { elements } = parseSnapshot(nested);
+		const home = elements.get("e2");
+		const about = elements.get("e3");
+		const submit = elements.get("e4"); // main is non-interactive → skipped
+		expect(home?.parentRef).toBe("e1");
+		expect(about?.parentRef).toBe("e1");
+		expect(submit?.parentRef).toBe("e1");
+	});
+
+	it("stores nesting level (not raw space count) as depth", () => {
+		const { elements } = parseSnapshot(nested);
+		expect(elements.get("e1")?.depth).toBe(0);
+		expect(elements.get("e2")?.depth).toBe(1);
+	});
+
+	it("re-emits indentation matching the source snapshot", () => {
+		const { text } = parseSnapshot(nested);
+		const lines = text.split("\n");
+		expect(lines[1]).toBe('  @e2 🔗 link "Home"');
+		expect(lines[3]).toBe('  @e3 🔗 link "About"');
+		expect(lines[6]).toBe('  @e4 🔘 button "Submit"');
+	});
+
+	it("siblings never claim each other as parents", () => {
+		// Skip-level case: main is non-interactive, so the buttons sit two
+		// levels below the dialog with a gap in the parent stack. Neither may
+		// claim the other as parent.
+		const gap = [
+			'- dialog "Confirm":',
+			"  - main:",
+			'    - button "Save"',
+			'    - button "Cancel"',
+		].join("\n");
+		const { elements } = parseSnapshot(gap);
+		const save = elements.get("e2");
+		const cancel = elements.get("e3");
+		expect(save?.parentRef).toBeUndefined();
+		expect(cancel?.parentRef).toBeUndefined();
+
+		// Plain siblings under an interactive container also never chain.
+		const { elements: bannerEls } = parseSnapshot(nested);
+		const home = bannerEls.get("e2");
+		const about = bannerEls.get("e3");
+		expect(about?.parentRef).not.toBe(home?.ref);
+	});
+});
 
 describe("snapshotFingerprint()", () => {
 	it("returns stable output for the same snapshot", () => {

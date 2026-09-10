@@ -15,7 +15,6 @@ implementations never drift.
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .browser_data import ACCESSIBILITY
 
@@ -39,7 +38,7 @@ class AriaCachedNode:
     raw: str
     occurrence_index: int = 0
     """0-based position among siblings with same role+name in the snapshot."""
-    parent_ref: Optional[str] = None
+    parent_ref: str | None = None
     """Ref of the nearest interactive ancestor (for subtree queries)."""
 
 
@@ -51,6 +50,7 @@ class AriaParseResult:
 
 
 # ─── Role icons ──────────────────────────────────────────────────────
+
 
 def _role_icon(role: str) -> str:
     return ACCESSIBILITY["roleIcons"].get(role, "")
@@ -64,6 +64,7 @@ def _truncate(s: str, max_len: int) -> str:
 
 # ─── Line parser ──────────────────────────────────────────────────────
 
+
 @dataclass
 class _ParsedLine:
     role: str
@@ -71,7 +72,7 @@ class _ParsedLine:
     props: list[str]
 
 
-def _parse_line(line: str) -> Optional[_ParsedLine]:
+def _parse_line(line: str) -> _ParsedLine | None:
     """Parse a single line from the accessibility snapshot YAML-like output.
 
     Expected format::
@@ -88,14 +89,16 @@ def _parse_line(line: str) -> Optional[_ParsedLine]:
 
     # Extract bracketed props like [level=1, checked]
     props: list[str] = []
-    cleaned = re.sub(r"\[([^\]]+)\]", lambda m: props.append(m.group(1).strip()) or "", content).strip()
+    cleaned = re.sub(
+        r"\[([^\]]+)\]", lambda m: props.append(m.group(1).strip()) or "", content
+    ).strip()
 
     match = re.match(r"^([a-zA-Z_-]+)\s*", cleaned)
     if not match:
         return None
 
     role = match.group(1).lower()
-    remainder = cleaned[match.end():].strip()
+    remainder = cleaned[match.end() :].strip()
     name = ""
 
     # Quoted name: "name" or "name":
@@ -112,6 +115,7 @@ def _parse_line(line: str) -> Optional[_ParsedLine]:
 
 
 # ─── Main parser ──────────────────────────────────────────────────────
+
 
 def parse_snapshot(snap: str) -> AriaParseResult:
     """Parse the YAML-like output of Playwright's page.aria_snapshot().
@@ -137,14 +141,17 @@ def parse_snapshot(snap: str) -> AriaParseResult:
     out_lines: list[str] = []
     ref_counter = 0
     occurrence_tracker: dict[str, int] = {}
-    # Depth-based parent stack — tracks the most recent interactive ref at each depth
-    parent_stack: list[str] = []
+    # Depth-based parent stack — tracks the most recent interactive ref at each
+    # level; None pads levels created by skipped (non-interactive) containers
+    parent_stack: list[str | None] = []
 
     for raw_line in lines:
         if not raw_line.strip():
             continue
 
-        depth = _count_leading_spaces(raw_line)
+        # Playwright's aria_snapshot() emits 2 spaces per nesting level; index
+        # the parent stack by level, not raw space count.
+        depth = _count_leading_spaces(raw_line) // 2
         trimmed = raw_line.strip()
 
         # Property lines (start with /) — pass through as-is
@@ -180,16 +187,20 @@ def parse_snapshot(snap: str) -> AriaParseResult:
         occurrence_index = occurrence_tracker.get(occ_key, 0)
         occurrence_tracker[occ_key] = occurrence_index + 1
 
-        # Parent stack: trim entries past current depth
+        # Parent stack: trim entries past current level
         while len(parent_stack) > depth:
             parent_stack.pop()
 
-        # Determine parentRef from the element at depth-1 (if any)
-        parent_ref: Optional[str] = None
-        if len(parent_stack) >= depth and depth > 0:
+        # Determine parentRef from the element at level-1 (if any)
+        parent_ref: str | None = None
+        if len(parent_stack) >= depth > 0:
             parent_ref = parent_stack[depth - 1]
 
-        # Push this ref onto the parent stack at its depth
+        # Push this ref onto the parent stack at its level; pad with None for
+        # skipped levels (non-interactive containers create gaps), mirroring
+        # the TS parser's hole-filled array.
+        while len(parent_stack) < depth:
+            parent_stack.append(None)
         parent_stack.append(ref)
 
         node = AriaCachedNode(
@@ -221,6 +232,7 @@ def parse_snapshot(snap: str) -> AriaParseResult:
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 
+
 def _count_leading_spaces(s: str) -> int:
     match = re.match(r"^(\s*)", s)
     return len(match.group(1)) if match else 0
@@ -246,9 +258,12 @@ def build_locator_args(node: AriaCachedNode) -> tuple[str, dict]:
         eq_idx = prop.find("=")
         if eq_idx > 0:
             key = prop[:eq_idx]
-            val = prop[eq_idx + 1:]
+            val = prop[eq_idx + 1 :]
             if key == "level":
-                kwargs["level"] = int(val)
+                try:
+                    kwargs["level"] = int(val)
+                except ValueError:
+                    kwargs.pop("level", None)
             elif key == "checked":
                 kwargs["checked"] = "mixed" if val == "mixed" else True
             elif key == "expanded":

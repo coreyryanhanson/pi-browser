@@ -291,6 +291,22 @@
 
 ### Fixed
 
+- **`browser-inspect` `subtree=` queries now work; `parentRef` chains were
+  never built** — both the TypeScript (`core/shared/accessibility-tree.ts`)
+  and Python (`pi_browser_bridge/accessibility.py`) ARIA parsers treated the
+  raw leading-space count of an `ariaSnapshot()` line as a nesting-level
+  index. Playwright emits 2 spaces per level, so in the TypeScript parser
+  `parentStack[depth - 1]` read an array hole and `parentRef` was never
+  assigned for any nested element (`subtree=` ancestry silently found
+  nothing), while the Python parser's append-based stack invented ancestry —
+  siblings claimed each other as parents, so `subtree=` returned elements
+  from outside the container. Both parsers now normalize depth to the
+  nesting level (spaces ÷ 2), and the Python parent stack pads skipped
+  levels (non-interactive containers create gaps) with `None`, matching the
+  TS hole-filled array. Re-emitted snapshot indentation no longer doubles on
+  nested elements, and sibling elements can no longer pass a `parentRef`
+  chain check. Regression tests cover nested, sibling, and skip-level
+  hierarchies on both runtimes.
 - **`browser` status slot no longer flip-flops between renderers** —
   `updateFooterStatus` (`tools/utils.ts`) and `renderBrowserGlyph`
   (`browser-toggle.ts`) both wrote to the `browser` status slot from the

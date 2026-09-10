@@ -97,27 +97,18 @@ function restoreProfile(_pi: ExtensionAPI, ctx: ExtensionContext): void {
 	}
 }
 
-// ---- Test helpers -------------------------------------------------
-
-/** @internal Reset cached state to defaults (test helper). */
-function _resetToggleStateForTest(): void {
+/**
+ * Reset cached module state to defaults.
+ *
+ * Called from index.ts on re-entry (pi reuses the cached module factory,
+ * e.g. during /resume) and from tests.
+ */
+export function resetToggleModuleState(): void {
 	_lastToggleState = true;
 	_lastLearnState = false;
 	_lastCtx = null;
 	_conversationDefaultProfile = undefined;
 }
-
-/** @internal Reset cached state (called from index.ts on re-entry). */
-function resetToggleModuleState(): void {
-	_lastToggleState = true;
-	_lastLearnState = false;
-	_lastCtx = null;
-	_conversationDefaultProfile = undefined;
-}
-
-// ---- Exports for testing -----------------------------------------
-
-export { _resetToggleStateForTest, resetToggleModuleState };
 
 // ---- Toggle initializer ------------------------------------------
 

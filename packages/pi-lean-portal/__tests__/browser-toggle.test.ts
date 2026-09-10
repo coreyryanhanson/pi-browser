@@ -20,7 +20,7 @@ import browserToggle, {
 	getToggleState,
 	getLearnState,
 	getConversationDefaultProfile,
-	_resetToggleStateForTest,
+	resetToggleModuleState,
 } from "../browser-toggle.js";
 
 // Clean globalThis registry between test files
@@ -29,7 +29,7 @@ const RESTORE_EVENT_KEY = "__piToolMaskingLastRestoreEvent";
 const MODULE_STATE_KEY = "__piToolMaskingModuleState";
 
 beforeEach(() => {
-	_resetToggleStateForTest();
+	resetToggleModuleState();
 	delete (globalThis as any)[REGISTRY_KEY];
 	delete (globalThis as any)[RESTORE_EVENT_KEY];
 	delete (globalThis as any)[MODULE_STATE_KEY];
@@ -99,8 +99,7 @@ function mockPi(initialTools?: string[]): MockPi {
 		}),
 		get events() {
 			return {
-				emit: (channel: string, data: unknown) =>
-					eventEmitter.emit(channel, data),
+				emit: (channel: string, data: unknown) => eventEmitter.emit(channel, data),
 				on: (channel: string, handler: (data: unknown) => void) => {
 					eventEmitter.on(channel, handler);
 					return () => eventEmitter.off(channel, handler);
@@ -300,10 +299,7 @@ describe("session_start integration", () => {
 			await h(eventObj, ctx);
 		}
 
-		expect(ctx.ui.setStatus).toHaveBeenCalledWith(
-			"browser",
-			expect.any(String),
-		);
+		expect(ctx.ui.setStatus).toHaveBeenCalledWith("browser", expect.any(String));
 	});
 });
 

@@ -13,14 +13,19 @@
  *
  */
 
-import { writeFileSync, rmSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import {
 	BROWSER_TEMP_DIR,
 	safeTaskId,
 	ensureBrowserTempDir,
 	formatBytes,
 } from "./shared/paths.js";
+import {
+	sha256Prefix,
+	cutAtNewline,
+	trackTempFile,
+	cleanupTrackedTempFiles,
+} from "./shared/temp-files.js";
 import TurndownService from "turndown";
 import { parse as parseHtml } from "node-html-parser";
 import { checkPage } from "./shared/bot-detection.js";
@@ -228,18 +233,12 @@ const activeFetchFiles = new Map<string, string[]>();
 function writeFetchTempFile(content: string, taskId: string): string {
 	ensureBrowserTempDir();
 
-	const hash = createHash("sha256").update(content).digest("hex").slice(0, 8);
+	const hash = sha256Prefix(content);
 	const safe = safeTaskId(taskId);
 	const filePath = `${BROWSER_TEMP_DIR}/fetch-${safe}-${hash}.md`;
 
 	writeFileSync(filePath, content, "utf-8");
 	return filePath;
-}
-
-function trackFetchFile(taskId: string, filePath: string): void {
-	const existing = activeFetchFiles.get(taskId) ?? [];
-	if (!existing.includes(filePath)) existing.push(filePath);
-	activeFetchFiles.set(taskId, existing);
 }
 
 interface CappedFetchContent {
@@ -256,10 +255,9 @@ function capFetchContent(content: string, taskId: string): CappedFetchContent {
 	}
 
 	const filePath = writeFetchTempFile(content, taskId);
-	trackFetchFile(taskId, filePath);
+	trackTempFile(activeFetchFiles, taskId, filePath);
 
-	let cut = content.lastIndexOf("\n", COMPACT_FETCH_LIMIT);
-	if (cut < COMPACT_FETCH_LIMIT / 2) cut = COMPACT_FETCH_LIMIT;
+	const cut = cutAtNewline(content, COMPACT_FETCH_LIMIT);
 
 	const inline =
 		content.slice(0, cut) +
@@ -273,28 +271,7 @@ function capFetchContent(content: string, taskId: string): CappedFetchContent {
  * If taskId is provided, only removes files for that task.
  */
 export function cleanupFetchTempFiles(taskId?: string): void {
-	if (taskId) {
-		const paths = activeFetchFiles.get(taskId) ?? [];
-		for (const p of paths) {
-			try {
-				rmSync(p, { force: true });
-			} catch {
-				/* best-effort */
-			}
-		}
-		activeFetchFiles.delete(taskId);
-	} else {
-		for (const [, paths] of activeFetchFiles) {
-			for (const p of paths) {
-				try {
-					rmSync(p, { force: true });
-				} catch {
-					/* best-effort */
-				}
-			}
-		}
-		activeFetchFiles.clear();
-	}
+	cleanupTrackedTempFiles(activeFetchFiles, taskId);
 }
 
 /**

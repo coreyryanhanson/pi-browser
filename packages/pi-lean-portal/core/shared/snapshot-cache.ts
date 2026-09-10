@@ -5,7 +5,8 @@
  * tree is written to /tmp/pi-lean-portal/snapshot-*.txt so the agent can read
  * elements past the truncation boundary with the read tool.
  *
- * Design parallels capFetchContent() in fetch-backend.ts:
+ * Temp-file lifecycle (tracking, cleanup, hash prefix) lives in
+ * temp-files.ts, shared with fetch-backend.ts:
  * - Pure utility functions, no class or global state beyond a tracking Map
  * - Caches ONLY when truncation occurred (snapshot > 2800 chars)
  * - Graceful I/O degradation (try-catch, no crash on disk errors)
@@ -15,8 +16,12 @@
  */
 
 import { writeFileSync, rmSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { BROWSER_TEMP_DIR, safeTaskId, ensureBrowserTempDir } from "./paths.js";
+import {
+	sha256Prefix,
+	trackTempFile,
+	cleanupTrackedTempFiles,
+} from "./temp-files.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -40,32 +45,19 @@ export interface CacheResult {
 	fingerprint: string;
 }
 
-/** Internal tracking entry for a cached file. */
-interface CacheEntry {
-	path: string;
-	fingerprint: string;
-	timestamp: number;
-}
-
 // ─── Internal state ────────────────────────────────────────────────────
 
 /**
  * Tracks active snapshot temp files per task.
- * For each task, entries are kept in insertion order (oldest first).
+ * For each task, entries are kept in insertion order (oldest first),
+ * so eviction can splice from the front.
  */
-const activeSnapshotFiles = new Map<string, CacheEntry[]>();
+const activeSnapshotFiles = new Map<string, string[]>();
 
 /** Monotonic file-index counter — guarantees unique filenames across writes. */
 let _snapshotIndexCounter = 0;
 
 // ─── Helpers ────────────────────────────────────────────────────────────
-
-/**
- * Compute an 8-char hex fingerprint of a string.
- */
-function sha256Prefix(content: string): string {
-	return createHash("sha256").update(content).digest("hex").slice(0, 8);
-}
 
 /**
  * Build a snapshot cache file path.
@@ -108,7 +100,6 @@ export function cacheSnapshot(
 		ensureBrowserTempDir();
 
 		const digest = sha256Prefix(snapshot);
-		const existingEntries = activeSnapshotFiles.get(taskId) ?? [];
 
 		// Monotonic index — avoids filename collisions with currently-tracked
 		// entries (length would collide with surviving higher-index files
@@ -118,26 +109,15 @@ export function cacheSnapshot(
 		const filePath = buildCacheFilePath(taskId, digest, nextIndex);
 		writeFileSync(filePath, snapshot, "utf-8");
 
-		// Track the new entry
-		const newEntry: CacheEntry = {
-			path: filePath,
-			fingerprint,
-			timestamp: Date.now(),
-		};
-		existingEntries.push(newEntry);
-		activeSnapshotFiles.set(taskId, existingEntries);
+		trackTempFile(activeSnapshotFiles, taskId, filePath);
 
-		// Evict oldest if over limit
-		if (existingEntries.length > MAX_FILES_PER_TASK) {
-			// Sort by timestamp (oldest first) and remove the oldest
-			existingEntries.sort((a, b) => a.timestamp - b.timestamp);
-			const toRemove = existingEntries.splice(
-				0,
-				existingEntries.length - MAX_FILES_PER_TASK,
-			);
-			for (const entry of toRemove) {
+		// Evict oldest if over limit (insertion order = age order)
+		const entries = activeSnapshotFiles.get(taskId);
+		if (entries && entries.length > MAX_FILES_PER_TASK) {
+			const toRemove = entries.splice(0, entries.length - MAX_FILES_PER_TASK);
+			for (const path of toRemove) {
 				try {
-					rmSync(entry.path, { force: true });
+					rmSync(path, { force: true });
 				} catch {
 					/* best-effort */
 				}
@@ -157,17 +137,7 @@ export function cacheSnapshot(
  * @param taskId - The task ID whose cached files should be removed.
  */
 export function removeSnapshotFiles(taskId: string): void {
-	const entries = activeSnapshotFiles.get(taskId);
-	if (!entries) return;
-
-	for (const entry of entries) {
-		try {
-			rmSync(entry.path, { force: true });
-		} catch {
-			/* best-effort */
-		}
-	}
-	activeSnapshotFiles.delete(taskId);
+	cleanupTrackedTempFiles(activeSnapshotFiles, taskId);
 }
 
 /**
@@ -175,23 +145,11 @@ export function removeSnapshotFiles(taskId: string): void {
  * Called during session_shutdown.
  */
 export function removeAllSnapshotFiles(): void {
-	for (const [, entries] of activeSnapshotFiles) {
-		for (const entry of entries) {
-			try {
-				rmSync(entry.path, { force: true });
-			} catch {
-				/* best-effort */
-			}
-		}
-	}
-	activeSnapshotFiles.clear();
-
-	// Also attempt to remove the cache directory itself
-	try {
-		rmSync(BROWSER_TEMP_DIR, { recursive: true, force: true });
-	} catch {
-		/* best-effort — dir may not be empty due to other files */
-	}
+	cleanupTrackedTempFiles(activeSnapshotFiles);
+	// ponytail: no orphan sweep — stale files live until /tmp cleanup;
+	// BROWSER_TEMP_DIR is shared with fetch spill files and screenshots, so
+	// a dir-wide rm here deleted other sessions' files. Add an owned-prefix
+	// mtime sweep if /tmp leaks ever matter.
 }
 
 /**

@@ -5,6 +5,7 @@
 
 import { writeFileSync } from "node:fs";
 import { BROWSER_TEMP_DIR, ensureBrowserTempDir } from "./shared/paths.js";
+import { cutAtNewline } from "./shared/temp-files.js";
 import { pluginRegistry } from "./plugin-registry.js";
 import { sessionManager } from "./shared/session-manager.js";
 import type { BrowserSession } from "./shared/session-manager.js";
@@ -20,6 +21,7 @@ import {
 	loadStorageState,
 	sanitizeProfileName,
 	sessionProfileName,
+	type StorageStateFile,
 } from "./shared/storage-state.js";
 import { loadFullConfig } from "./plugin-config.js";
 import {
@@ -170,7 +172,9 @@ function navFailure(
  * Load saved storage state for a named/session profile (if any).
  * Returns undefined when there's no profile or the file is unreadable.
  */
-function loadProfileStorageState(profileName: string | undefined): unknown {
+function loadProfileStorageState(
+	profileName: string | undefined,
+): StorageStateFile | undefined {
 	if (!profileName) return undefined;
 	try {
 		return loadStorageState(profileName) ?? undefined;
@@ -304,9 +308,7 @@ export function compactSnapshot(
 	const remaining = elementCount > 0 ? elementCount : undefined;
 
 	if (snapshot.length > COMPACT_SNAPSHOT_VERY_LARGE) {
-		let topCut = snapshot.lastIndexOf("\n", COMPACT_SNAPSHOT_TOP_LIMIT);
-		if (topCut < COMPACT_SNAPSHOT_TOP_LIMIT / 2)
-			topCut = COMPACT_SNAPSHOT_TOP_LIMIT;
+		const topCut = cutAtNewline(snapshot, COMPACT_SNAPSHOT_TOP_LIMIT);
 
 		const topSection = snapshot.slice(0, topCut);
 		const bottomHint = remaining
@@ -315,8 +317,7 @@ export function compactSnapshot(
 		return topSection + bottomHint;
 	}
 
-	let cut = snapshot.lastIndexOf("\n", COMPACT_SNAPSHOT_LIMIT);
-	if (cut < COMPACT_SNAPSHOT_LIMIT / 2) cut = COMPACT_SNAPSHOT_LIMIT;
+	const cut = cutAtNewline(snapshot, COMPACT_SNAPSHOT_LIMIT);
 
 	const topSection = snapshot.slice(0, cut);
 	const tail = remaining

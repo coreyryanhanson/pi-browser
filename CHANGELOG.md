@@ -300,6 +300,16 @@
   `renderBrowserGlyph` is deleted, `syncCachedState` calls
   `updateFooterStatus` on toolset toggle/restore events, and the portal
   `AGENTS.md` status-bar section reflects the session-aware format.
+- **Snapshot shutdown no longer deletes other sessions' temp files** —
+  `removeAllSnapshotFiles()` performed a recursive delete of the shared
+  temp dir (`/tmp/pi-lean-portal`), which also contained other running
+  sessions' fetch spill files and screenshots, so one conversation's
+  shutdown could break another's in-flight reads. It now removes only
+  the snapshot files it tracks. Tracked-file cleanup (hash prefix,
+  per-task tracking, best-effort removal) is consolidated into a shared
+  `core/shared/temp-files.ts` used by both the snapshot cache and the
+  fetch backend; stale orphan files from crashed sessions now live
+  until normal `/tmp` cleanup instead of being swept at shutdown.
 - **Reserved-char pre-scan is now block-scalar aware** — `parse-api-guide`'s
   frontmatter pre-scan for plain scalars starting with a reserved YAML
   character no longer misreads the continuation lines of a folded/literal

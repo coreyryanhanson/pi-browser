@@ -291,6 +291,15 @@
 
 ### Fixed
 
+- **`browser` status slot no longer flip-flops between renderers** —
+  `updateFooterStatus` (`tools/utils.ts`) and `renderBrowserGlyph`
+  (`browser-toggle.ts`) both wrote to the `browser` status slot from the
+  same cached flags but emitted different strings (`● idle` vs
+  `● PW: example.com [profile]`), so the display depended on which path
+  ran last. The session-aware renderer is now the only one:
+  `renderBrowserGlyph` is deleted, `syncCachedState` calls
+  `updateFooterStatus` on toolset toggle/restore events, and the portal
+  `AGENTS.md` status-bar section reflects the session-aware format.
 - **Reserved-char pre-scan is now block-scalar aware** — `parse-api-guide`'s
   frontmatter pre-scan for plain scalars starting with a reserved YAML
   character no longer misreads the continuation lines of a folded/literal

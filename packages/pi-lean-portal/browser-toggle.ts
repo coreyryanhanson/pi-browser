@@ -1,8 +1,8 @@
 import type {
 	ExtensionAPI,
 	ExtensionContext,
-	ThemeColor,
 } from "@earendil-works/pi-coding-agent";
+import { updateFooterStatus } from "./tools/utils.js";
 import {
 	defineToolset,
 	TOOLSET_EVENTS,
@@ -54,7 +54,7 @@ let _lastToggleState = true;
 /** @internal Last known learn state for status bar coloring. */
 let _lastLearnState = false;
 
-/** @internal Last captured ExtensionContext for event-driven glyph rendering. */
+/** @internal Last captured ExtensionContext for event-driven status-bar rendering. */
 let _lastCtx: ExtensionContext | null = null;
 
 export function getToggleState(): boolean {
@@ -119,29 +119,6 @@ function resetToggleModuleState(): void {
 
 export { _resetToggleStateForTest, resetToggleModuleState };
 
-// ---- Glyph helpers -----------------------------------------------
-
-function renderBrowserGlyph(
-	ctx: {
-		ui: {
-			setStatus: (key: string, label: string) => void;
-			theme: { fg: (c: ThemeColor, t: string) => string };
-		};
-	},
-	webEnabled: boolean,
-	learnEnabled: boolean,
-): void {
-	if (!webEnabled) {
-		ctx.ui.setStatus("browser", "○ web off");
-		return;
-	}
-	if (learnEnabled) {
-		ctx.ui.setStatus("browser", ctx.ui.theme.fg("success", "●") + " idle");
-	} else {
-		ctx.ui.setStatus("browser", ctx.ui.theme.fg("accent", "●") + " idle");
-	}
-}
-
 // ---- Toggle initializer ------------------------------------------
 
 export default function initBrowserToggle(pi: ExtensionAPI) {
@@ -152,14 +129,14 @@ export default function initBrowserToggle(pi: ExtensionAPI) {
 	const learnToolset = defineToolset(pi, PORTAL_LEARN_SPEC);
 
 	// ── Keep cached state in sync with library events ─────────
-	// Re-render the glyph on every change/restore so external callers
+	// Re-render the status bar on every change/restore so external callers
 	// (e.g. pi-tbox's `/tbox all off`) keep the slot in sync — the cached
 	// flags alone don't update the status bar.
 	const syncCachedState = () => {
 		_lastToggleState = webToolset.isEnabled(pi);
 		_lastLearnState = learnToolset.isEnabled(pi);
 		if (_lastCtx) {
-			renderBrowserGlyph(_lastCtx, _lastToggleState, _lastLearnState);
+			updateFooterStatus(_lastCtx);
 		}
 	};
 
@@ -207,15 +184,10 @@ export default function initBrowserToggle(pi: ExtensionAPI) {
 				);
 			} else if (cmd === "off") {
 				webToolset.disable(pi); // cascades learn off via requires
-				ctx.ui.notify(
-					"🌐 Browser tools disabled. /web on to re-enable.",
-					"info",
-				);
+				ctx.ui.notify("🌐 Browser tools disabled. /web on to re-enable.", "info");
 			} else if (cmd === "profile" || cmd.startsWith("profile ")) {
 				const sub = cmd.slice("profile".length).trim();
-				const { handleProfileSubcommand } = await import(
-					"./browser-profile.js"
-				);
+				const { handleProfileSubcommand } = await import("./browser-profile.js");
 				await handleProfileSubcommand(sub, ctx, pi, (profile: string) => {
 					if (profile === "none") {
 						_conversationDefaultProfile = undefined;
@@ -226,9 +198,7 @@ export default function initBrowserToggle(pi: ExtensionAPI) {
 				});
 			} else if (cmd === "cookies" || cmd.startsWith("cookies ")) {
 				const sub = cmd.slice("cookies".length).trim();
-				const { handleCookiesSubcommand } = await import(
-					"./browser-cookies.js"
-				);
+				const { handleCookiesSubcommand } = await import("./browser-cookies.js");
 				await handleCookiesSubcommand(sub, ctx);
 			} else if (cmd === "status") {
 				const { handleStatusSubcommand } = await import("./browser-status.js");
@@ -257,7 +227,7 @@ export default function initBrowserToggle(pi: ExtensionAPI) {
 		},
 	});
 
-	// ── Session handlers: restore profile + render glyph ─────
+	// ── Session handlers: restore profile + render status bar ─
 	pi.on("session_start", async (_event, ctx) => {
 		restoreProfile(pi, ctx);
 		_lastCtx = ctx;

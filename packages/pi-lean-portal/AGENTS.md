@@ -37,11 +37,12 @@ Capabilities (`PluginCapabilities`) advertise quirks. The router checks them at 
 
 ## Status Bar (`browser` slot)
 
-Portal manages the `browser` status bar slot, showing the browser tool toggle state:
+Portal manages the `browser` status bar slot via a single renderer, `updateFooterStatus` in `tools/utils.ts` (also invoked from `browser-toggle.ts` on toolset change/restore events):
 
-- `● idle` (accent/blue) — browser tools enabled
-- `● idle` (success/green) — learn mode enabled
 - `○ web off` — browser tools disabled
+- `● idle` (accent/blue dot) — browser tools enabled, no active sessions
+- `● <session status>` — session-aware body from `sessionManager.getStatus()`: e.g. `PW: example.com [work]` (plugin symbol + domain + named profile tag), `N crashed`, or a per-profile session grouping for multiple active sessions
+- The dot is success/green when learn mode is enabled, accent/blue otherwise
 
 (The `search` slot is owned by `pi-lean-search`; see that package's `AGENTS.md`.)
 

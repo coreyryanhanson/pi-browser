@@ -23,6 +23,7 @@ import {
 	installDialogHandlers,
 	getConsoleLog as getRawConsoleLog,
 	clearConsoleLog,
+	clearDialogLog,
 } from "../../core/shared/browser-events.js";
 import { sessionManager } from "../../core/shared/session-manager.js";
 import { checkPage } from "../../core/shared/bot-detection.js";
@@ -1118,5 +1119,7 @@ export abstract class PlaywrightPluginBase implements BrowserPlugin {
 		}
 		this._pages.delete(taskId);
 		this._elementCache.delete(taskId);
+		clearDialogLog(taskId);
+		clearConsoleLog(taskId);
 	}
 }

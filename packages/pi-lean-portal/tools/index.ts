@@ -5,7 +5,10 @@
  * This barrel collects them for import by index.ts.
  */
 
-export { browserNavigateTool } from "./browser-navigate.js";
+export {
+ browserNavigateTool,
+ strategyDescription,
+} from "./browser-navigate.js";
 export { browserSnapshotTool } from "./browser-snapshot.js";
 export { browserClickTool } from "./browser-click.js";
 export { browserTypeTool } from "./browser-type.js";

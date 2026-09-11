@@ -14,7 +14,7 @@
 
 import type { Guide } from "./guide-loader.js";
 import { loadAllGuides } from "./guide-store.js";
-import { projectToGuide } from "./parse-api-guide.js";
+import { projectToGuide } from "./guide-catalog.js";
 import { getApiToggleState } from "./api-toggle.js";
 
 // The global key portal's index.ts sets at load time.

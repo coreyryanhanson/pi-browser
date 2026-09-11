@@ -21,9 +21,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	parseApiGuide,
-	projectToGuide,
-	loadApiGuidesFromDir,
-	formatApiGuideCatalog,
 	stampFrontmatterField,
 	PAGINATION_ALLOWLISTS,
 	AUTH_ALLOWLISTS,
@@ -32,6 +29,11 @@ import {
 	OP_ALLOWLIST,
 	RESPONSE_SHAPE_ALLOWLIST,
 } from "../core/parse-api-guide.js";
+import {
+	projectToGuide,
+	loadApiGuidesFromDir,
+	formatApiGuideCatalog,
+} from "../core/guide-catalog.js";
 import { slug } from "../core/path-template.js";
 import { parse as yamlParse } from "yaml";
 import {

@@ -47,6 +47,8 @@ import {
 	resolveSecretHeaders,
 	resolveSecretQueryParams,
 	resolveSecretPathParams,
+	missingRequiredSecrets,
+	secretPathTokenNames,
 	canonicalStoreDomain,
 	hasUsableTokenPath,
 } from "./auth.js";
@@ -155,11 +157,7 @@ export async function handleVerifySubcommand(
 			const headerRes = resolveSecretHeaders(guide.auth, storeDomain);
 			const queryRes = resolveSecretQueryParams(guide.auth, storeDomain);
 			const pathRes = resolveSecretPathParams(guide.auth, storeDomain);
-			const missingRequired = [
-				...headerRes.absentRequired,
-				...queryRes.absentRequired,
-				...pathRes.missing,
-			];
+			const missingRequired = missingRequiredSecrets(headerRes, queryRes, pathRes);
 			if (missingRequired.length > 0) {
 				ctx.ui.notify(
 					`🔑 ${guide.shortName} requires a secret not yet provisioned: ` +
@@ -214,10 +212,7 @@ export async function handleVerifySubcommand(
 
 	// Path tokens owned by secretPathRefs are store-filled, never
 	// caller-supplied — never unsatisfiable.
-	const secretPathTokens =
-		guide.auth.kind === "static-key"
-			? new Set(Object.keys(guide.auth.secretPathRefs ?? {}))
-			: new Set<string>();
+	const secretPathTokens = secretPathTokenNames(guide.auth);
 
 	// ── Fetch loop ──────────────────────────────────────────────
 	const ops = guide.operations;

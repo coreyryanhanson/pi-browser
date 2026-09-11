@@ -28,7 +28,7 @@ vi.mock("../../core/transport.js", async () => ({
 }));
 
 import { paginate } from "../../core/helpers.js";
-import { loadApiGuidesFromDir } from "../../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../../core/guide-catalog.js";
 import { setUserGuidesDir, invalidateCache } from "../../core/guide-store.js";
 
 const PAGE1_XML = `<OAI-PMH><ListRecords><record><metadata><title>One</title></metadata></record><record><metadata><title>Two</title></metadata></record><resumptionToken completeListSize="3">token-abc</resumptionToken></ListRecords></OAI-PMH>`;

@@ -17,6 +17,12 @@ import { join } from "node:path";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
+/**
+ * Truncation threshold shared with api-fetch's renderer — the same number
+ * governs where inline output is cut and where disk spill begins.
+ */
+export const INLINE_LIMIT = 4000;
+
 /** Max cached spill files per session (conversation). */
 // ponytail: cap; raise if agent reads >8 distinct ops concurrently
 const MAX_FILES_PER_SESSION = 8;
@@ -75,7 +81,7 @@ function safeSessionKey(s: string): string {
 /**
  * Spill a full JSON response to a temp file.
  *
- * Writes only when `json` is longer than 4000 chars (truncation will
+ * Writes only when `json` is longer than INLINE_LIMIT chars (truncation will
  * occur). Gracefully degrades to a no-op on any filesystem error.
  * Evicts the oldest file per session when the count exceeds
  * MAX_FILES_PER_SESSION.
@@ -88,7 +94,7 @@ export function spillResponse(
 	json: string,
 	sessionKey: string,
 ): SpillResult | null {
-	if (json.length <= 4000) {
+	if (json.length <= INLINE_LIMIT) {
 		return null;
 	}
 
@@ -113,10 +119,7 @@ export function spillResponse(
 		// Evict oldest if over limit
 		if (entries.length > MAX_FILES_PER_SESSION) {
 			entries.sort((a, b) => a.timestamp - b.timestamp);
-			const toRemove = entries.splice(
-				0,
-				entries.length - MAX_FILES_PER_SESSION,
-			);
+			const toRemove = entries.splice(0, entries.length - MAX_FILES_PER_SESSION);
 			for (const entry of toRemove) {
 				try {
 					rmSync(entry.path, { force: true });
@@ -166,7 +169,7 @@ export function formatSpillNotice(
 ): string {
 	if (!spill) {
 		return (
-			`\n_Response truncated at 4000 chars. Full response has ${jsonLength} chars ` +
+			`\n_Response truncated at ${INLINE_LIMIT} chars. Full response has ${jsonLength} chars ` +
 			`(disk spill unavailable — re-call api-fetch to regenerate)._`
 		);
 	}

@@ -33,7 +33,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiLearnTool, setStagingRoot } from "../tools/api-learn.js";
+import { apiLearnTool } from "../tools/api-learn.js";
+import { setStagingRoot } from "../core/staging.js";
 import { contentText } from "../tools/utils.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 

@@ -29,13 +29,12 @@ import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { appendFooter, contentText } from "./utils.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	formatGuideListings,
 	selectGuideByShortName,
 	shortNameErrorText,
-} from "../core/parse-api-guide.js";
+} from "../core/guide-catalog.js";
 import type { ApiGuide } from "../core/api-guide-types.js";
 import { findGuidesByDomain, getUserGuidesDir } from "../core/guide-store.js";
 import { assertSafeDomain, slug } from "../core/path-template.js";
@@ -44,18 +43,10 @@ import {
 	renderForSentinels,
 	loadVerifyJson,
 } from "../core/verify-command.js";
+import { secretPathTokenNames } from "../core/auth.js";
+import { stagingDirFor } from "../core/staging.js";
 
-// ═══════════════════════════════════════════════════════════════════
-// Staged working copy (/tmp) — same root api-learn writes to
-// ═══════════════════════════════════════════════════════════════════
-
-let _stagingRoot = join(tmpdir(), "pi-lean-host");
-
-/** Test override — keeps scaffolds out of the real /tmp root (mirrors
- * api-learn's `setStagingRoot`). */
-export function setStagingRoot(dir: string): void {
-	_stagingRoot = dir;
-}
+// Staged working copy (/tmp) — same root api-learn writes to (core/staging.js).
 
 // ═══════════════════════════════════════════════════════════════════
 // Authoring manual + templates
@@ -117,12 +108,9 @@ function mergeVerifySentinels(
 	for (const [opName, params] of Object.entries(existing)) {
 		merged[opName] = { ...params };
 	}
+	// Path tokens owned by secretPathRefs are store-filled — no sentinel.
+	const secretPathTokens = secretPathTokenNames(guide.auth);
 	for (const op of guide.operations) {
-		// Path tokens owned by secretPathRefs are store-filled — no sentinel.
-		const secretPathTokens =
-			guide.auth.kind === "static-key"
-				? new Set(Object.keys(guide.auth.secretPathRefs ?? {}))
-				: new Set<string>();
 		const sentinels = renderForSentinels(unsatisfiable(op, {}, secretPathTokens));
 		if (sentinels.length === 0) continue; // runnable op → no entry
 		const entry = merged[op.name] ?? {};
@@ -222,7 +210,7 @@ export const apiScaffoldTool = defineTool({
 			// domain (api-learn {domain, new:true} stages by domain), the user is
 			// mid-authoring — tell them to save it first. Otherwise keep the
 			// browse + author-one-first guidance.
-			const stagedDraftDir = join(_stagingRoot, domain);
+			const stagedDraftDir = stagingDirFor(domain);
 			const hasStagedDraft = existsSync(join(stagedDraftDir, "guide.md"));
 			return {
 				content: [
@@ -289,7 +277,7 @@ export const apiScaffoldTool = defineTool({
 		}
 
 		const { guide, dirName } = selected;
-		const stagedDir = join(_stagingRoot, slug(guide.shortName));
+		const stagedDir = stagingDirFor(slug(guide.shortName));
 
 		// ── Refuse-to-overwrite (before any write) ────────────
 		if (helper && existsSync(join(stagedDir, "helper.ts"))) {

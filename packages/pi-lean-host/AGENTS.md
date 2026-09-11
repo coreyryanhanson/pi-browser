@@ -343,7 +343,11 @@ speculatively.
   function with the same module-level state.
 - `core/` — `api-guide-types.ts` (recipe schema types, `ParseError`,
   `GATHER_ALL_MAX_FALLBACK`), `parse-api-guide.ts` (the parser +
-  `projectToGuide()` + `loadApiGuidesFromDir()` + `formatApiGuideCatalog()`),
+  `stampFrontmatterField()` + `isStaleSchema()`), `guide-catalog.ts`
+  (directory loader `loadApiGuidesFromDir()` + `formatApiGuideCatalog()` +
+  `projectToGuide()` + the disambiguation helpers — split out of the parser
+  file; the dependency is one-directional: catalog imports parser, never
+  the reverse),
   `guide-loader.ts` + `guide-store.ts` (multi-valued domain map,
   `findGuidesByDomain` returns `{ guide, dirName }[]`, `invalidateCache()`),
   `resolve-op.ts` (shared guide→helper→transform→auth→dispatch sequence for
@@ -394,7 +398,7 @@ speculatively.
   brief composition + `sendUserMessage` followUp + learn flip + notify),
   `select-picker.ts` (two-column picker + the ✓/○ checklist multi-select),
   `portal-projection.ts`,
-  `verify-ship-manifest.ts` (vendored host-only copy of the portal utility).
+  `staging.ts` (shared /tmp staging root for api-learn + api-scaffold drafts).
 - `tools/` — `api-guide.ts`, `api-fetch.ts`, `api-learn.ts` (directory-level
   staged-file authoring: `{domain, new: true}` → fresh template; fetch-recipe
   stages `guide.md` + present `helper.ts`/`verify.json` siblings to

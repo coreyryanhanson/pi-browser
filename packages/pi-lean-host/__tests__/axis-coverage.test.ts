@@ -26,7 +26,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadApiGuidesFromDir } from "../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../core/guide-catalog.js";
 import type {
 	ApiGuide,
 	Operation,

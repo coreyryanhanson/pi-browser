@@ -37,16 +37,17 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join, sep } from "node:path";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
 	parseApiGuide,
 	stampFrontmatterField,
+} from "../core/parse-api-guide.js";
+import {
 	formatGuideListings,
 	selectGuideByShortName,
 	shortNameErrorText,
-} from "../core/parse-api-guide.js";
+} from "../core/guide-catalog.js";
 import {
 	GUIDE_SCHEMA_VERSION,
 	type ApiGuide,
@@ -58,31 +59,10 @@ import {
 	findGuidesByDomain,
 } from "../core/guide-store.js";
 import { assertSafeDomain, slug } from "../core/path-template.js";
+import { stagingDirFor, isUnderStagingRoot } from "../core/staging.js";
 
-// ═══════════════════════════════════════════════════════════════════
-// Staged working copy (/tmp) — the draft the agent edits between saves
-// ═══════════════════════════════════════════════════════════════════
-
-let _stagingRoot = join(tmpdir(), "pi-lean-host");
-
-/** Test override — mirrors `setUserGuidesDir` so tests keep drafts out of
- * the real /tmp root. */
-export function setStagingRoot(dir: string): void {
-	_stagingRoot = dir;
-}
-
-/** Deterministic staged dir: `<root>/<key>/`. The key is the requested
- * `domain` for templates (placeholder shortName) and `slug(shortName)` for
- * fetched recipes (which is the on-disk dirName). */
-function stagingDirFor(key: string): string {
-	return join(_stagingRoot, key);
-}
-
-/** True when `p` is a staged dir under the staging root (the root itself
- * excluded — save must never try to rename the whole root). */
-function isUnderStagingRoot(p: string): boolean {
-	return p !== _stagingRoot && p.startsWith(`${_stagingRoot}${sep}`);
-}
+// Staged working copy (/tmp) — the draft the agent edits between saves.
+// Root + helpers live in core/staging.js (shared with api-scaffold).
 
 /** Write the working copy (template or fetched raw recipe) to the staged
  * dir. Returns the staged *dir* path (multi-file — siblings write to the

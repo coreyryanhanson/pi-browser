@@ -33,6 +33,7 @@ import {
 	getOAuthDir,
 } from "../core/oauth-store.js";
 import { writeSecret, setSecretsDir } from "../core/secrets-store.js";
+import { stubTokenEndpoint, tokenResponse } from "./test-utils.js";
 
 const TOKEN_URL = "https://token.example.com/oauth/token";
 const AUTHORIZE_URL = "https://auth.example.com/oauth/authorize";
@@ -53,23 +54,6 @@ afterAll(() => {
 	rmSync(tmpSecrets, { recursive: true, force: true });
 	rmSync(tmpOAuth, { recursive: true, force: true });
 });
-
-function stubTokenEndpoint(
-	handler: (url: string, init: RequestInit) => Response,
-): ReturnType<typeof vi.fn> {
-	const fetchMock = vi.fn((url: unknown, init?: RequestInit) =>
-		Promise.resolve(handler(String(url), init ?? {})),
-	);
-	vi.stubGlobal("fetch", fetchMock);
-	return fetchMock;
-}
-
-function tokenResponse(body: unknown, status = 200): Response {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: { "content-type": "application/json" },
-	});
-}
 
 function makeCtx(opts: { hasUI?: boolean } = {}): {
 	ctx: Parameters<typeof handleOauthSubcommand>[1];

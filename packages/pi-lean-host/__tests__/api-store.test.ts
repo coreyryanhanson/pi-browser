@@ -21,12 +21,7 @@ import {
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-// Mock theme: fg/bold pass text through so assertions see raw strings.
-const mockTheme = {
-	fg: (_style: string, text: string) => text,
-	bold: (s: string) => s,
-} as any;
+import { mockTheme } from "./test-utils.js";
 
 const STATIC_RECIPE = `---
 schemaVersion: 1

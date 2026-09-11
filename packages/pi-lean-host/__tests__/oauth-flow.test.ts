@@ -41,6 +41,7 @@ import {
 import { writeJson0600 } from "../core/fs-0600.js";
 import { writeSecret, setSecretsDir } from "../core/secrets-store.js";
 import type { OAuth2Auth } from "../core/api-guide-types.js";
+import { stubTokenEndpoint, tokenResponse } from "./test-utils.js";
 
 const TOKEN_URL = "https://token.example.com/oauth/token";
 const AUTHORIZE_URL = "https://api.example.com/oauth/authorize";
@@ -59,25 +60,6 @@ function makeAuthCodeAuth(overrides: Partial<OAuth2Auth> = {}): OAuth2Auth {
 		authorizeUrl: AUTHORIZE_URL,
 		...overrides,
 	};
-}
-
-/** Stub global fetch to answer token-endpoint POSTs. */
-function stubTokenEndpoint(
-	handler: (url: string, init: RequestInit) => Response,
-): void {
-	vi.stubGlobal(
-		"fetch",
-		vi.fn((url: unknown, init?: RequestInit) =>
-			Promise.resolve(handler(String(url), init ?? {})),
-		),
-	);
-}
-
-function tokenResponse(body: unknown, status = 200): Response {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: { "content-type": "application/json" },
-	});
 }
 
 let tmpSecrets: string;

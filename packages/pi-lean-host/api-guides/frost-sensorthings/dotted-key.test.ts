@@ -40,7 +40,7 @@ vi.mock("../../core/transport.js", async () => ({
 }));
 
 import { paginate } from "../../core/helpers.js";
-import { loadApiGuidesFromDir } from "../../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../../core/guide-catalog.js";
 import { setUserGuidesDir, invalidateCache } from "../../core/guide-store.js";
 import { fetchUrl } from "../../core/transport.js";
 

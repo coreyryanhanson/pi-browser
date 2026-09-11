@@ -30,8 +30,12 @@ import {
 } from "../core/resolve-op.js";
 import { canonicalStoreDomain, containsSecret } from "../core/auth.js";
 import { provisionedDomainsSuffix } from "../core/secrets-store.js";
-import { formatGuideListings } from "../core/parse-api-guide.js";
-import { spillResponse, formatSpillNotice } from "../core/response-spill.js";
+import { formatGuideListings } from "../core/guide-catalog.js";
+import {
+	spillResponse,
+	formatSpillNotice,
+	INLINE_LIMIT,
+} from "../core/response-spill.js";
 import { appendFooter, contentText } from "./utils.js";
 import type { Operation, ApiGuide } from "../core/api-guide-types.js";
 
@@ -412,8 +416,6 @@ export const apiFetchTool = defineTool({
 // ═══════════════════════════════════════════════════════════════════
 // Formatting helpers
 // ═══════════════════════════════════════════════════════════════════
-
-const INLINE_LIMIT = 4000;
 
 /**
  * Format a request URL line for result transparency.

@@ -33,6 +33,7 @@ import {
 } from "../core/oauth-store.js";
 import { writeSecret, setSecretsDir } from "../core/secrets-store.js";
 import { pickChecklist } from "../core/select-picker.js";
+import { mockTheme, stubTokenEndpoint, tokenResponse } from "./test-utils.js";
 
 const TOKEN_URL = "https://token.example.com/oauth/token";
 const AUTHORIZE_URL = "https://auth.example.com/oauth/authorize";
@@ -52,23 +53,6 @@ afterAll(() => {
 	rmSync(tmpSecrets, { recursive: true, force: true });
 	rmSync(tmpOAuth, { recursive: true, force: true });
 });
-
-function stubTokenEndpoint(
-	handler: (url: string, init: RequestInit) => Response,
-): ReturnType<typeof vi.fn> {
-	const fetchMock = vi.fn((url: unknown, init?: RequestInit) =>
-		Promise.resolve(handler(String(url), init ?? {})),
-	);
-	vi.stubGlobal("fetch", fetchMock);
-	return fetchMock;
-}
-
-function tokenResponse(body: unknown): Response {
-	return new Response(JSON.stringify(body), {
-		status: 200,
-		headers: { "content-type": "application/json" },
-	});
-}
 
 /**
  * Tool-context fake (ExtensionContext shape). `calls` records the prompt
@@ -743,7 +727,7 @@ describe("pickChecklist", () => {
 		// The factory is invoked synchronously by ui.custom in production; here
 		// we invoke it directly with fakes and drive key input.
 		const fakeTui = { requestRender: vi.fn() };
-		const theme = { fg: (_c: string, t: string) => t, bold: (t: string) => t };
+		const theme = mockTheme;
 		let resolved: string[] | undefined;
 		const done = (v: string[] | undefined) => {
 			resolved = v;
@@ -773,7 +757,7 @@ describe("pickChecklist", () => {
 		void pickChecklist(ctx as any, "Scopes", [{ value: "read", label: "read" }]);
 		const component = factory!(
 			{ requestRender: vi.fn() },
-			{ fg: (_c: string, t: string) => t, bold: (t: string) => t },
+			mockTheme,
 			{},
 			(v: string[] | undefined) => {
 				resolved = v;

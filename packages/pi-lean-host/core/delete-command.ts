@@ -32,7 +32,7 @@ import {
 	formatGuideListings,
 	selectGuideByShortName,
 	shortNameErrorText,
-} from "./parse-api-guide.js";
+} from "./guide-catalog.js";
 import { pickGuide } from "./guide-picker.js";
 import { assertSafeDomain } from "./path-template.js";
 

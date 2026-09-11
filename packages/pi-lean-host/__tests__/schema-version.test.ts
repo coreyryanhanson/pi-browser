@@ -27,8 +27,8 @@ import { join } from "node:path";
 import {
 	parseApiGuide,
 	isStaleSchema,
-	loadApiGuidesFromDir,
 } from "../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../core/guide-catalog.js";
 import { GUIDE_SCHEMA_VERSION } from "../core/api-guide-types.js";
 import type { ApiGuide, LoadedApiGuides } from "../core/api-guide-types.js";
 

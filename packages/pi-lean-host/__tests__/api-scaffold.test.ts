@@ -34,16 +34,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apiScaffoldTool, setStagingRoot } from "../tools/api-scaffold.js";
+import { apiScaffoldTool } from "../tools/api-scaffold.js";
+import { setStagingRoot } from "../core/staging.js";
 import { contentText } from "../tools/utils.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 import { slug } from "../core/path-template.js";
-
-// ── Mock theme (fg returns text unstyled) ────────────────────────
-const mockTheme = {
-	fg: (_style: string, text: string) => text,
-	bold: (s: string) => s,
-} as any;
+import { mockTheme } from "./test-utils.js";
 
 let tmpGuidesDir: string;
 let tmpStagingRoot: string;

@@ -31,6 +31,7 @@ import {
 	resolveSecretHeaders,
 	resolveSecretQueryParams,
 	resolveSecretPathParams,
+	missingRequiredSecrets,
 	resolveAccessToken,
 	authStatusLine,
 	canonicalStoreDomain,
@@ -152,11 +153,7 @@ export async function resolveOpForExecution(
 			const headerRes = resolveSecretHeaders(guide.auth, storeDomain);
 			const queryRes = resolveSecretQueryParams(guide.auth, storeDomain);
 			const pathRes = resolveSecretPathParams(guide.auth, storeDomain);
-			const missingRequired = [
-				...headerRes.absentRequired,
-				...queryRes.absentRequired,
-				...pathRes.missing,
-			];
+			const missingRequired = missingRequiredSecrets(headerRes, queryRes, pathRes);
 			if (missingRequired.length > 0) {
 				return {
 					ok: false,

@@ -38,7 +38,8 @@ import {
 	apiFetchTool,
 	__test__setBypassUrlSafety,
 } from "../tools/api-fetch.js";
-import { apiLearnTool, setStagingRoot } from "../tools/api-learn.js";
+import { apiLearnTool } from "../tools/api-learn.js";
+import { setStagingRoot } from "../core/staging.js";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test server — echoes params so we can verify helper transforms

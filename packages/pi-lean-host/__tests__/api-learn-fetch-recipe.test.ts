@@ -34,13 +34,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	apiLearnTool,
-	setStagingRoot,
 	OAUTH2_CC_EXAMPLE,
 	OAUTH2_AC_EXAMPLE,
 } from "../tools/api-learn.js";
+import { setStagingRoot } from "../core/staging.js";
 import { contentText } from "../tools/utils.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 import { parseApiGuide } from "../core/parse-api-guide.js";
+import { mockTheme } from "./test-utils.js";
 
 let tmpGuidesDir: string;
 let tmpStagingRoot: string;
@@ -110,12 +111,6 @@ function callLearn(
 	if (extra?.guide !== undefined) p.guide = extra.guide;
 	return apiLearnTool.execute("test", p, undefined, undefined, undefined as any);
 }
-
-// ── Mock theme (fg returns text unstyled) ────────────────────────
-const mockTheme = {
-	fg: (_style: string, text: string) => text,
-	bold: (s: string) => s,
-} as any;
 
 describe("api-learn fetch-recipe", () => {
 	it("0 guides → template written to staging path (fails closed)", async () => {

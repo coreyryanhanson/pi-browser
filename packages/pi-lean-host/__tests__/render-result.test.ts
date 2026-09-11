@@ -14,13 +14,7 @@ import { apiFetchTool } from "../tools/api-fetch.js";
 import { apiGuideTool } from "../tools/api-guide.js";
 import { apiLearnTool } from "../tools/api-learn.js";
 import { apiProbeTool } from "../tools/api-probe.js";
-
-// ── Mock theme ───────────────────────────────────────────────────
-// fg(style, text) -> text  (drop styling so assertions see raw text).
-const mockTheme = {
-	fg: (_style: string, text: string) => text,
-	bold: (s: string) => s,
-} as any;
+import { mockTheme } from "./test-utils.js";
 
 /** Invoke a tool's renderResult with the standard 4-arg signature. */
 function renderResult(

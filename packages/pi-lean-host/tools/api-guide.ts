@@ -19,13 +19,14 @@ import {
 	findGuidesByDomain,
 	getCatalogText,
 } from "../core/guide-store.js";
+import { TODAY } from "../core/parse-api-guide.js";
 import {
 	formatGuideListings,
 	selectGuideByShortName,
 	shortNameErrorText,
-	TODAY,
-} from "../core/parse-api-guide.js";
+} from "../core/guide-catalog.js";
 import { authStatusLine, canonicalStoreDomain } from "../core/auth.js";
+import { INLINE_LIMIT } from "../core/response-spill.js";
 import type { ApiGuide } from "../core/api-guide-types.js";
 
 export const apiGuideTool = defineTool({
@@ -265,15 +266,14 @@ function renderGuideDetail(
 	// budget api-fetch uses (INLINE_LIMIT) so a typical guide fits whole;
 	// longer prose spills with a pointer rather than flooding context.
 	if (guide.content) {
-		const PROSE_LIMIT = 4000;
 		const prose = guide.content.trim();
 		lines.push("");
 		lines.push("— Guide notes —");
-		if (prose.length <= PROSE_LIMIT) {
+		if (prose.length <= INLINE_LIMIT) {
 			lines.push(prose);
 		} else {
-			lines.push(prose.slice(0, PROSE_LIMIT));
-			lines.push(`… (${prose.length - PROSE_LIMIT} more chars omitted)`);
+			lines.push(prose.slice(0, INLINE_LIMIT));
+			lines.push(`… (${prose.length - INLINE_LIMIT} more chars omitted)`);
 		}
 	}
 

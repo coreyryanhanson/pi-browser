@@ -21,7 +21,7 @@ import {
 	formatGuideListings,
 	selectGuideByShortName,
 	shortNameErrorText,
-} from "./parse-api-guide.js";
+} from "./guide-catalog.js";
 import { pickWithDescription } from "./select-picker.js";
 
 /**

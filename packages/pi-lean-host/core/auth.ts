@@ -152,6 +152,36 @@ export function resolveSecretPathParams(
 }
 
 /**
+ * Fold the three resolver results into one deduped list of missing required
+ * secret names (a secret may be referenced by more than one ref map). One
+ * derivation shared by resolve-op, the /api verify precheck, and the auth
+ * status footer.
+ */
+export function missingRequiredSecrets(
+	headerRes: SecretResolution,
+	queryRes: QuerySecretResolution,
+	pathRes: PathSecretResolution,
+): string[] {
+	return [
+		...new Set([
+			...headerRes.absentRequired,
+			...queryRes.absentRequired,
+			...pathRes.missing,
+		]),
+	];
+}
+
+/**
+ * Path-token names owned by `secretPathRefs` — store-filled, never
+ * caller-supplied, so never unsatisfiable (see `unsatisfiable`).
+ */
+export function secretPathTokenNames(auth: AuthConfig): ReadonlySet<string> {
+	return auth.kind === "static-key"
+		? new Set(Object.keys(auth.secretPathRefs ?? {}))
+		: new Set<string>();
+}
+
+/**
  * Secret store-names a guide's auth block declares, from `auth.secretRefs`,
  * and `auth.secretQueryRefs` (ref.secret values). For oauth2 the clientId/
  * clientSecret refs are declared too — their store names are resolved
@@ -215,15 +245,7 @@ export function authStatusLine(
 			const headerRes = resolveSecretHeaders(auth, domain);
 			const queryRes = resolveSecretQueryParams(auth, domain);
 			const pathRes = resolveSecretPathParams(auth, domain);
-			// Dedupe across the ref maps: a secret injected into a header, a
-			// query param, and a path token must be named once, not three times.
-			const absentRequired = [
-				...new Set([
-					...headerRes.absentRequired,
-					...queryRes.absentRequired,
-					...pathRes.missing,
-				]),
-			];
+			const absentRequired = missingRequiredSecrets(headerRes, queryRes, pathRes);
 			if (absentRequired.length > 0) {
 				return (
 					`🔑 auth: requires ${absentRequired.join(", ")} — not provisioned. ` +

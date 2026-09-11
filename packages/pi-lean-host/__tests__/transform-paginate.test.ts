@@ -23,7 +23,7 @@ vi.mock("../core/transport.js", async () => ({
 	fetchUrl: vi.fn(),
 }));
 
-import { loadApiGuidesFromDir } from "../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../core/guide-catalog.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 import { paginate } from "../core/helpers.js";
 import type { ApiGuide, Operation } from "../core/api-guide-types.js";

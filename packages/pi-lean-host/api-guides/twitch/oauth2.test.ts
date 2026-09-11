@@ -39,7 +39,7 @@ vi.mock("../../core/transport.js", async () => ({
 	fetchUrl: vi.fn(),
 }));
 
-import { loadApiGuidesFromDir } from "../../core/parse-api-guide.js";
+import { loadApiGuidesFromDir } from "../../core/guide-catalog.js";
 import { setUserGuidesDir, invalidateCache } from "../../core/guide-store.js";
 import { resolveOpForExecution } from "../../core/resolve-op.js";
 import { setSecretsDir, writeSecret } from "../../core/secrets-store.js";

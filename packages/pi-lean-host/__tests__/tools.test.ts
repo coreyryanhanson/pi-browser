@@ -31,13 +31,12 @@ import {
 	apiFetchTool,
 	__test__setBypassUrlSafety,
 } from "../tools/api-fetch.js";
-import { apiLearnTool, setStagingRoot } from "../tools/api-learn.js";
+import { apiLearnTool } from "../tools/api-learn.js";
+import { setStagingRoot } from "../core/staging.js";
 import { setUserGuidesDir, invalidateCache } from "../core/guide-store.js";
 import { writeSecret, setSecretsDir } from "../core/secrets-store.js";
-import {
-	parseApiGuide,
-	selectGuideByShortName,
-} from "../core/parse-api-guide.js";
+import { parseApiGuide } from "../core/parse-api-guide.js";
+import { selectGuideByShortName } from "../core/guide-catalog.js";
 
 // ═══════════════════════════════════════════════════════════════════
 // Test server for API endpoints

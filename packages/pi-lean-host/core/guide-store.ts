@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import {
 	loadApiGuidesFromDir,
 	formatApiGuideCatalog,
-} from "./parse-api-guide.js";
+} from "./guide-catalog.js";
 import { buildDomainMap } from "./guide-loader.js";
 import type { ApiGuide, LoadedApiGuides, NotifyFn } from "./api-guide-types.js";
 

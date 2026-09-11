@@ -36,6 +36,7 @@ import { writeSecret, setSecretsDir } from "../core/secrets-store.js";
 import { setUserGuidesDir } from "../core/guide-store.js";
 import { resolveOpForExecution } from "../core/resolve-op.js";
 import { handleOauthSubcommand } from "../core/oauth-command.js";
+import { stubTokenEndpoint, tokenResponse } from "./test-utils.js";
 import type {
 	ApiGuide,
 	OAuth2Auth,
@@ -90,25 +91,6 @@ function makeOp(path: string): Operation {
 		params: {},
 		pathParams: [],
 	};
-}
-
-/** Stub global fetch to answer token-endpoint POSTs. */
-function stubTokenEndpoint(
-	handler: (url: string, init: RequestInit) => Response | Promise<Response>,
-): void {
-	vi.stubGlobal(
-		"fetch",
-		vi.fn((url: unknown, init?: RequestInit) =>
-			Promise.resolve(handler(String(url), init ?? {})),
-		),
-	);
-}
-
-function tokenResponse(body: unknown, status = 200): Response {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: { "content-type": "application/json" },
-	});
 }
 
 let tmpSecrets: string;

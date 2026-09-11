@@ -76,10 +76,12 @@ This kills two whole classes of recurring mistakes before they exist:
 - **Agents getting the same API wrong every session.** The reason they do is
   *they are the ones writing the calls.* Move call construction into a
   reviewed tool + fixed helpers, and those mistakes disappear at the source.
-- **Arbitrary eval / egress safety.** Executable TS in a guide is a sandbox
-  problem. Declarative recipes executed by a fixed tool are not — and because
-  bundled recipes are inert, the only code that ever runs is code you
-  explicitly placed in your own directory.
+- **Arbitrary eval / egress safety (default path).** Declarative recipes
+  run no agent-authored code, and bundled recipes are inert. The exception is
+  local helpers: in `/api learn` the agent can write `helper.ts` to your
+  guides directory. These run in-process with the agent's privileges. Since
+  the agent already has shell access, this isn't a privilege escalation,
+  but it introduces persistent code.
 
 ### Why not just a skill?
 
@@ -102,7 +104,7 @@ demand. A skill is pure text with no in-process eval, whereas a loaded
 |------|----------------|---------------|-------------------|-------|
 | Built-in helpers | package source (`core/`) | maintainers | yes | reviewed |
 | Local user helpers | `~/.pi/agent/pi-lean-host/api-guides/<slug(shortName)>/helper.ts` | you, or the agent in `/api learn` | no | user-owned |
-| Bundled recipes | `caritas` repo (`api-guides/<slug(shortName)>/`) | maintainers | no — [Reference Recipes](#reference-recipes-caritas) | **inert — never auto-executed** |
+| Bundled recipes | `caritas` repo (`api-guides/<slug(shortName)>/`) | maintainers | no (see [Reference Recipes](#reference-recipes-caritas)) | **inert: never auto-executed** |
 
 Built-in helpers cover the common 90%. Local user helpers cover the weird 10%
 (computed signatures, strange date transforms, custom auth).

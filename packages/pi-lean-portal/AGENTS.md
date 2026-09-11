@@ -28,10 +28,9 @@ evaluate            — JS eval in page
 getElementCache     — for browser-inspect
 cleanup(taskId)     — teardown one session
 getCookies, addCookies, clearCookies  — cookie operations
-getStorageState     — profile storage for session restore
 ```
 
-The 12 registered tools map to 12 tool-facing plugin methods. The cookie/storage methods (`getCookies`, `addCookies`, `clearCookies`) are router-facing, and the profile-persistence methods (`getStorageState`) are backend-internal — the shared `persistSessionState()` helper in `core/shared/storage-state.ts` owns the save path. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 18 methods (all required).
+The 12 registered tools map to 12 tool-facing plugin methods. The cookie methods (`getCookies`, `addCookies`, `clearCookies`) are router-facing — profile persistence flows through the shared `persistSessionState()` helper in `core/shared/storage-state.ts`. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 18 methods (17 required + 1 optional).
 
 Capabilities (`PluginCapabilities`) advertise quirks. The router checks them at dispatch time.
 

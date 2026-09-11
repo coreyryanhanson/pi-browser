@@ -137,7 +137,7 @@ export function runPersistenceSuite(
 				deleteStorageState(TEST_PROFILE);
 			});
 
-			it(`${name}: navigates with a named profile — consent dialog is visible`, async () => {
+			it(`${name}: navigates — consent dialog is visible`, async () => {
 				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout);
 				expect(nav.success).toBe(true);
 				expect(nav.title).toContain("Cookie Persistence Test");
@@ -174,7 +174,7 @@ export function runPersistenceSuite(
 				}
 			});
 
-			it(`${name}: navigates again with same profile — consent dialog does NOT reappear`, async () => {
+			it(`${name}: navigates again — consent dialog does NOT reappear (cookies persisted)`, async () => {
 				const nav = await plugin.navigate(getServerUrl(), TASK_ID, navTimeout);
 				expect(nav.success).toBe(true);
 

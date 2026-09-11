@@ -345,12 +345,14 @@ The domains caritas covers (a discoverability index, may drift from the live
 repo):
 
 ```text
-arxiv                         ecb-data-portal               internet-archive              wayback-availability
-boletin-oficial-del-estado    etherscan                     library-of-congress           wayback-cdx-server
-coingecko                     federal-register              musicbrainz                   wikidata
-data-gov                      gbif                          open-library                  wikimedia-action
-datos-gob-es                  github                        pubmed-e-utilities            wikipedia-rest
-deutsche-nationalbibliothek   gitlab                        usgs-earthquake
+arxiv                         federal-register              mastodon                      twitch-user
+boletin-oficial-del-estado    frost-server-sensorthings     musicbrainz                   usgs-earthquake
+coingecko                     gbif                          open-food-facts               wayback-availability
+data-gov                      github                        open-library                  wayback-cdx-server
+datos-gob-es                  gitlab                        pubmed-e-utilities            wikidata
+deutsche-nationalbibliothek   inaturalist                   stripe                        wikimedia-action
+ecb-data-portal               internet-archive              telegram-bot-api              wikipedia-rest
+etherscan                     library-of-congress           twitch                        world-bank-indicators
 ```
 
 Several are **keyed** (`auth.kind: static-key`), the spread that exercises

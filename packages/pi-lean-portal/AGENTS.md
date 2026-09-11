@@ -14,7 +14,7 @@
 
 ## `BrowserPlugin` interface (`core/plugin-api.ts`)
 
-19 methods (18 required + 1 optional):
+18 methods (17 required + 1 optional):
 
 ```
 init?(config)       — optional, called once at startup
@@ -273,7 +273,7 @@ The monorepo root owns the test split principle and the summary counts table; th
 - **Compact truncation everywhere**: snapshots truncated at ~2500 chars (with `\nfingerprint:XXXXX`), fetch content at ~4000 chars with temp file spill to `/tmp/pi-lean-portal/fetch-*.md`.
 - **Snapshot Disk Cache** (`core/shared/snapshot-cache.ts`): when truncated, full tree written to `/tmp/pi-lean-portal/snapshot-*.txt`. Last 2 files per task. Cached regardless of bot-detection status — the full inline content still passes through on bot pages for human judgment, with the cache file available as a recovery file for the agent. I/O failures degrade gracefully to inline-only.
 - **`browser-inspect`** (`core/shared/dom-extractor.ts`): runs inline JS via `page.evaluate()`. Requires `getElementCache()` on the plugin. Text output truncated at ~2500 chars by default; pass `maxChars=0` for full. Keyword filtering via `query` parameter (case-insensitive substring on text, href, src).
-- **`parentRef` on `AriaCachedNode`**: enables `subtree=...` queries in `browser-inspect`. Set by depth-based parent stack in `parseSnapshot()`'s single pass. Dialogs become parent of interior elements.
+- **`parentRef` on `AriaCachedNode`**: enables `subtree=...` queries in `browser-inspect`. Set by the depth-based parent stack in `parseSnapshot()`'s single pass — it is the nearest *interactive* ancestor, only recorded when that ancestor is at the immediately enclosing level. Informational wrappers (`main`, `region`, `group`, `complementary`) get no `@e` ref, so they create a gap and the wrapped element's `parentRef` is `undefined`.
 - **`dialogDetected` is resolved from element cache**: computed from the parsed `ElementCache` via `Array.some()` matching `role="dialog"` or `role="alertdialog"`. Not affected by snapshot truncation (unlike the old string-scan approach).
 - **Guide staleness**: no builtin site guides shipped — entirely user-authored via `~/.pi/agent/pi-lean-portal/web-guides/*.md`. User `.md` files override builtins by name collision (the file name minus `.md` becomes the guide key; a user `bot-detection.md` shadows the builtin `bot-detection` pattern). Guides carry `updated` date and `currentDate` timestamp in output.
 - **Learn mode toggle**: `/web learn` enables `web-learn` tool; `/web on` removes it. Agent never calls `web-learn` unprompted. Default is off on fresh sessions.

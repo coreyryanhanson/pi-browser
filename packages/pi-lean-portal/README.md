@@ -67,7 +67,8 @@ Session profiles: 1 (manage with /web profile)
 ```
 
 When `pi-lean-search` is also installed, the status bar shows two independent
-glyphs: `● idle` (browser state) and `● searxng` (search health/state).
+glyphs: `● idle` / `● PW: example.com [work]` (browser state, session-aware)
+and `● searxng` (search health/state).
 
 ### Persistence
 

@@ -21,7 +21,10 @@ export interface AriaCachedNode {
 	raw: string;
 	/** 0-based position among siblings with the same role+name in the snapshot */
 	occurrenceIndex: number;
-	/** Ref of the nearest interactive ancestor (e.g., for subtree queries) */
+	/**
+	 * Ref of the immediately enclosing interactive ancestor; informational
+	 * wrapper roles (e.g. dialog > main > button) leave this undefined.
+	 */
 	parentRef?: string;
 }
 

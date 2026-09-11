@@ -21,7 +21,7 @@
 - `index.ts` — entry: tool registration, health probe, `/searxng-status` command, search slot management.
 - `web-search-tool.ts` — `defineTool` for `web-search` (execute + TUI rendering).
 - `search-config.ts` — settings reader for `searxng.url`.
-- `verify-ship-manifest.ts` / `ship-manifest.test.ts` — production `.ts` coverage check.
+- `__tests__/verify-ship-manifest.ts` / `__tests__/ship-manifest.test.ts` — production `.ts` coverage check.
 - `__tests__/web-search.test.ts` — config reader + tool structure tests.
 - `README.md` — user-facing docs (install, config, graceful degradation).
 

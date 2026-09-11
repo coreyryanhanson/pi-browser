@@ -156,9 +156,9 @@ export interface ClearCookiesOptions {
 /**
  * The contract every interactive browser backend must implement.
  *
- * The 18 required operations (plus getElementCache and cookie/storage
- * methods) make up the full contract. Lifecycle hooks are called by
- * the framework, not the agent.
+ * The 17 required operations plus the optional `init` hook make up the
+ * full contract. Lifecycle hooks (init, cleanupAll) are called by the
+ * framework, not the agent.
  */
 export interface BrowserPlugin {
 	// ── Identity ───────────────────────────────────────────────

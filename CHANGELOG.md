@@ -250,6 +250,13 @@
   their implementation. Nothing else changes — cookies keep their own
   `getCookies`/`addCookies`/`clearCookies` methods.
 
+- **`pi-lean-portal` — plugin validation hard-requires more operations** —
+  `REQUIRED_OPERATIONS` (`core/plugin-registry.ts`) now also rejects a
+  backend missing `getElementCache`, `getCookies`, `addCookies`,
+  `clearCookies`, or `cleanupAll` at load time. Custom Node backends in
+  `user-backends/` that previously registered while missing any of these
+  must implement them.
+
 - **`pi-lean-search` — unconfigured-SearXNG startup notice** — when
   `searxng.url` is unset, the `search` status bar slot stays hidden
   (existing behavior) but a one-time warning notify now fires on Pi
@@ -321,8 +328,9 @@
 
 ### Fixed
 
-- **`browser-inspect` `subtree=` queries now work; `parentRef` chains were
-  never built** — both the TypeScript (`core/shared/accessibility-tree.ts`)
+- **`browser-inspect` `parentRef` chains were never built, so `subtree=`
+  found nothing; ancestry now resolves for directly nested interactive
+  elements** — both the TypeScript (`core/shared/accessibility-tree.ts`)
   and Python (`pi_browser_bridge/accessibility.py`) ARIA parsers treated the
   raw leading-space count of an `ariaSnapshot()` line as a nesting-level
   index. Playwright emits 2 spaces per level, so in the TypeScript parser

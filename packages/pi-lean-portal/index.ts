@@ -176,12 +176,10 @@ export default function (pi: ExtensionAPI) {
 		validConfigs.length > 0
 			? validConfigs.map(({ name, enabled }) => ({ name, enabled }))
 			: [{ name: "chromium", enabled: true }]; // fallback path
-	const enabledNames = strategyPlugins
-		.filter((p) => p.enabled)
-		.map((p) => p.name);
-	const disabledNames = strategyPlugins
-		.filter((p) => !p.enabled)
-		.map((p) => p.name);
+	const enabledNames: string[] = [];
+	const disabledNames: string[] = [];
+	for (const { name, enabled } of strategyPlugins)
+		(enabled ? enabledNames : disabledNames).push(name);
 	// SAFETY: defineTool's return type doesn't expose the TypeBox schema as
 	// mutable, but `parameters` is the live Type.Object literal whose
 	// properties.strategy.description exists at runtime; patching it before

@@ -53,12 +53,11 @@ export function listProfiles(): Array<{
 	try {
 		if (!existsSync(PROFILE_DIR)) return [];
 		const entries = readdirSync(PROFILE_DIR, { withFileTypes: true });
-		const profiles = entries
-			.filter((e) => e.isDirectory() && !e.name.startsWith("."))
-			.map((e) => ({
-				name: e.name,
-				stateSize: profileStateSize(e.name),
-			}));
+		const profiles = entries.flatMap((e) =>
+			e.isDirectory() && !e.name.startsWith(".")
+				? [{ name: e.name, stateSize: profileStateSize(e.name) }]
+				: [],
+		);
 		profiles.sort((a, b) => a.name.localeCompare(b.name));
 		return profiles;
 	} catch {

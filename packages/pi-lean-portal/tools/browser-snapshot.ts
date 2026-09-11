@@ -68,7 +68,7 @@ export const browserSnapshotTool = defineTool({
 		if (d?.error) return new Text(theme.fg("error", "Snapshot failed"), 0, 0);
 		const ec = (d?.elementCount as number) ?? 0;
 		const content = (result.content?.[0] as any)?.text ?? "";
-		const isFull = !!(d?.full as boolean);
+		const isFull = Boolean(d?.full);
 		if (expanded) {
 			let text = theme.fg("accent", `📋 ${ec} elements`);
 			text += isFull ? "" : theme.fg("dim", " (compact)");

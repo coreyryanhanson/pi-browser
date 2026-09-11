@@ -718,7 +718,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			);
 
 			const result = raw as Record<string, unknown>;
-			const success = !!result.success;
+			const success = Boolean(result.success);
 
 			// Track this task for cleanup
 			this._pages.add(taskId);
@@ -768,11 +768,11 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				// Populate local element cache from bridge response
 				this._populateElementCache(taskId, raw.elements);
 				return {
-					success: !!raw.success,
+					success: Boolean(raw.success),
 					snapshot: (raw.snapshot as string) ?? "",
 					elementCount: (raw.elementCount as number) ?? 0,
 					dialogEvents: (raw.dialogEvents as DialogEvent[]) ?? [],
-					...(raw.error !== undefined ? { error: raw.error as string } : {}),
+					...(raw.error === undefined ? {} : { error: raw.error as string }),
 				};
 			},
 			(error) => ({
@@ -857,9 +857,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.screenshot",
 			{ taskId, fullPage },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				dataUri: (raw.dataUri as string) ?? "",
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, dataUri: "", error }),
 		);
@@ -874,9 +874,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.getConsoleMessages",
 			{ taskId },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				messages: (raw.messages as ConsoleMessagesResult["messages"]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, messages: [], error }),
 		);
@@ -905,9 +905,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				? { taskId, expression }
 				: { taskId, expression, readOnly },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				result: raw.result,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, error, result: undefined }),
 		);
@@ -933,13 +933,15 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			{},
 			(raw): QuirksDescriptor => ({
 				success: true,
-				fingerprint_managed_context: !!raw.fingerprint_managed_context,
+				fingerprint_managed_context: Boolean(raw.fingerprint_managed_context),
 				eval_prefix: (raw.eval_prefix as string) ?? "",
-				scroll_via_wheel: !!raw.scroll_via_wheel,
-				skip_default_viewport: !!raw.skip_default_viewport,
-				skip_networkidle: !!raw.skip_networkidle,
-				wrap_mw_eval_in_eval: !!raw.wrap_mw_eval_in_eval,
-				csp_safe_readonly_via_init_script: !!raw.csp_safe_readonly_via_init_script,
+				scroll_via_wheel: Boolean(raw.scroll_via_wheel),
+				skip_default_viewport: Boolean(raw.skip_default_viewport),
+				skip_networkidle: Boolean(raw.skip_networkidle),
+				wrap_mw_eval_in_eval: Boolean(raw.wrap_mw_eval_in_eval),
+				csp_safe_readonly_via_init_script: Boolean(
+					raw.csp_safe_readonly_via_init_script,
+				),
 			}),
 			(error): QuirksDescriptor => ({
 				success: false,
@@ -964,9 +966,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.getCookies",
 			{ taskId, ...(urls ? { urls } : {}) },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				cookies: (raw.cookies as Cookie[]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, cookies: [], error }),
 		);
@@ -977,8 +979,8 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.addCookies",
 			{ taskId, cookies },
 			(raw) => ({
-				success: !!raw.success,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				success: Boolean(raw.success),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, error }),
 		);
@@ -997,8 +999,8 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				...(options?.path ? { path: options.path } : {}),
 			},
 			(raw) => ({
-				success: !!raw.success,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				success: Boolean(raw.success),
+				...(raw.error === undefined ? {} : { error: raw.error as string }),
 			}),
 			(error) => ({ success: false, error }),
 		);
@@ -1193,7 +1195,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	private _toInteractionResult(raw: unknown): InteractionResult {
 		const r = raw as Record<string, unknown>;
 		const result: InteractionResult = {
-			success: !!r.success,
+			success: Boolean(r.success),
 		};
 		if (r.newUrl != null) result.newUrl = r.newUrl as string;
 		if (r.newTitle != null) result.newTitle = r.newTitle as string;

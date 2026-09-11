@@ -73,25 +73,11 @@ class SessionManager {
 
 	updateSession(
 		taskId: string,
-		updates: Partial<
-			Pick<
-				BrowserSession,
-				| "currentUrl"
-				| "currentTitle"
-				| "pluginName"
-				| "crashed"
-				| "currentSnapshotFingerprint"
-				| "cachePopulatedAt"
-				| "lastInteractionAt"
-				| "persistState"
-				| "profileName"
-				| "piSessionId"
-			>
-		>,
+		updates: Partial<Omit<BrowserSession, "taskId">>,
 	): void {
 		const session = this.#sessions.get(taskId);
 		if (!session) return;
-		// ponytail: the `as any` is bounded by the Partial<Pick<BrowserSession, …>>
+		// ponytail: the `as any` is bounded by the Partial<Omit<BrowserSession, "taskId">>
 		// type above — only declared session fields can land here. Skip-undefined
 		// preserves existing fields (matches the prior per-field guards).
 		for (const [k, v] of Object.entries(updates)) {

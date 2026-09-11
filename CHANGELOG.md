@@ -2,28 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- **`browser-inspect` schema no longer promises unsupported `ref` +
-  `text=true` subtree scoping** — the `ref` description claimed that
-  combining it with `text=true` scopes the DOM walker to that element's
-  subtree, but `text=true` always extracts the whole page (`params.ref`
-  is only consumed on the element-query path). The description is
-  corrected; scoping remains a possible future feature.
-
-- **`/web profile` restore now picks the newest choice, not the oldest** —
-  `restoreProfile()` in `browser-toggle.ts` returned on the **first**
-  `portal-conversation-state` entry found in the session branch, but
-  `getBranch()` walks chronologically root→leaf — so after switching
-  profiles mid-conversation (e.g. `/web profile work` →
-  `/web profile shopping`), a `/reload`, `/resume`, or branch switch via
-  `/tree` silently restored the **first** profile chosen in the session
-  instead of the most recent one. The loop now keeps walking and the last
-  valid entry wins, matching pi's own session-persistence convention
-  (last-writer-wins) and fixing restore on both `session_start` and
-  `session_tree`. Covered by a new regression test feeding two
-  chronological entries and asserting the newest wins.
-
 ### Added
 
 - **`pi-lean-host` — declarative REST API client package** — a new
@@ -372,6 +350,26 @@
   `` `all:` `` field prefixes) were being rejected as malformed even though
   the YAML parsed cleanly; they now load normally. Genuine plain-scalar
   offenders are still flagged in one pass.
+
+- **`browser-inspect` schema no longer promises unsupported `ref` +
+  `text=true` subtree scoping** — the `ref` description claimed that
+  combining it with `text=true` scopes the DOM walker to that element's
+  subtree, but `text=true` always extracts the whole page (`params.ref`
+  is only consumed on the element-query path). The description is
+  corrected; scoping remains a possible future feature.
+
+- **`/web profile` restore now picks the newest choice, not the oldest** —
+  `restoreProfile()` in `browser-toggle.ts` returned on the **first**
+  `portal-conversation-state` entry found in the session branch, but
+  `getBranch()` walks chronologically root→leaf — so after switching
+  profiles mid-conversation (e.g. `/web profile work` →
+  `/web profile shopping`), a `/reload`, `/resume`, or branch switch via
+  `/tree` silently restored the **first** profile chosen in the session
+  instead of the most recent one. The loop now keeps walking and the last
+  valid entry wins, matching pi's own session-persistence convention
+  (last-writer-wins) and fixing restore on both `session_start` and
+  `session_tree`. Covered by a new regression test feeding two
+  chronological entries and asserting the newest wins.
 
 ## [0.4.0] - 2026-08-02
 

@@ -30,9 +30,23 @@
  *    revalidate-only (ETag present) or refetched every time (none).
  */
 
+import { readFileSync } from "node:fs";
 import { request, Agent, interceptors, type Dispatcher } from "undici";
 import { gunzipSync, inflateRawSync, inflateSync } from "node:zlib";
 import { ssrfGuard } from "./ssrf-guard.js";
+
+// User-Agent version tracks the package version (no release-script edit needed).
+// Falls back to "unknown" if package.json is unreadable — never fail transport init.
+let HOST_UA_VERSION = "unknown";
+try {
+	HOST_UA_VERSION = (
+		JSON.parse(
+			readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
+		) as { version: string }
+	).version;
+} catch {
+	// keep fallback
+}
 
 // ponytail: module-level composed agents; closed only on process exit.
 // Add a close() in session_shutdown if leak-detection ever flags it.
@@ -672,7 +686,7 @@ export async function fetchUrl(
 	const reqHeaders: Record<string, string> = { ...opts?.headers };
 	if (!reqHeaders["user-agent"]) {
 		reqHeaders["user-agent"] =
-			"pi-lean-host/0.4.0 (+https://github.com/coreyryanhanson/pi-lean-dimension)";
+			`pi-lean-host/${HOST_UA_VERSION} (+https://github.com/coreyryanhanson/pi-lean-dimension)`;
 	}
 
 	// The entry being revalidated, captured at If-None-Match time. The 304

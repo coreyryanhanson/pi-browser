@@ -27,10 +27,7 @@ interface SearXNGAnswerLegacy {
 
 interface SearXNGAnswerTranslationItem {
 	text: string;
-	transliteration?: string;
-	definitions?: string[];
 	synonyms?: string[];
-	examples?: string[];
 }
 
 interface SearXNGAnswerTranslations {
@@ -45,7 +42,7 @@ interface SearXNGWeatherQuantity {
 }
 
 interface SearXNGWeatherItem {
-	location?: { name: string; latitude?: number; longitude?: number };
+	location?: { name: string };
 	temperature?: SearXNGWeatherQuantity;
 	condition?: string;
 	summary?: string;
@@ -58,7 +55,6 @@ interface SearXNGWeatherItem {
 interface SearXNGAnswerWeather {
 	template: "answer/weather.html";
 	current: SearXNGWeatherItem;
-	forecasts?: SearXNGWeatherItem[];
 	service?: string;
 }
 
@@ -74,6 +70,21 @@ interface SearXNGResponse {
 }
 
 // ─── Answer rendering ────────────────────────────────────────────
+
+// Duck-types an unknown SearXNG answer template so it still renders.
+function unknownAnswerFallback(a: SearXNGAnswer): {
+	template: string;
+	answer?: string;
+} {
+	// SAFETY: SearXNG can return answer templates not in the union above;
+	// the payload is untyped JSON, so duck-type it as a generic record and
+	// pick up a bare `answer` string if present.
+	const f = a as unknown as Record<string, unknown>;
+	return {
+		template: String(f.template ?? "?"),
+		...(typeof f.answer === "string" ? { answer: f.answer } : {}),
+	};
+}
 
 // Box width (chars). Title row: `┌─ <title> ` + dashes to reach BOX_W.
 const BOX_W = 40;
@@ -101,7 +112,8 @@ function windLine(c: SearXNGWeatherItem): string {
 function renderAnswers(answers: SearXNGAnswer[]): string {
 	const blocks: string[] = [];
 
-	for (const a of answers.slice(0, 3)) {
+	// Callers pre-slice to 3 — don't cap again here.
+	for (const a of answers) {
 		let title: string;
 		let lines: string[];
 		switch (a.template) {
@@ -157,14 +169,13 @@ function renderAnswers(answers: SearXNGAnswer[]): string {
 				break;
 			}
 			default: {
-				const f = a as unknown as Record<string, unknown>;
-				if ("answer" in f && typeof f.answer === "string") {
-					title = "Answer";
-					lines = [trunc(f.answer as string, 500)];
-				} else {
-					blocks.push(`[answer: ${String(f.template ?? "?")}]`);
+				const fallback = unknownAnswerFallback(a);
+				if (fallback.answer === undefined) {
+					blocks.push(`[answer: ${fallback.template}]`);
 					continue;
 				}
+				title = "Answer";
+				lines = [trunc(fallback.answer, 500)];
 			}
 		}
 		blocks.push(box(title, lines));
@@ -194,19 +205,23 @@ function answerDetail(a: SearXNGAnswer): {
 		case "answer/weather.html":
 			return { template: a.template, text: a.current?.summary ?? "" };
 		default: {
-			const f = a as unknown as Record<string, unknown>;
-			return { template: String(f.template ?? "?"), text: "" };
+			const fallback = unknownAnswerFallback(a);
+			return { template: fallback.template, text: fallback.answer ?? "" };
 		}
 	}
 }
 
 // ─── URL building ─────────────────────────────────────────────────
 
-function buildSearchUrl(
+/** Strip trailing slashes so `${base}/search` never double-slashes. */
+export function normalizeBaseUrl(baseUrl: string): string {
+	return baseUrl.replace(/\/+$/, "");
+}
+
+export function buildSearchUrl(
 	baseUrl: string,
 	query: string,
 	options: {
-		count: number;
 		pageno: number;
 		language: string;
 		safesearch: string;
@@ -215,13 +230,11 @@ function buildSearchUrl(
 		engines: string;
 	},
 ): string {
-	const normalized = baseUrl.replace(/\/+$/, "");
+	const normalized = normalizeBaseUrl(baseUrl);
 	const params = new URLSearchParams({
 		format: "json",
 		q: query,
 	});
-
-	params.set("limit", String(options.count));
 
 	if (options.language) params.set("language", options.language);
 	if (options.safesearch) params.set("safesearch", options.safesearch);
@@ -234,6 +247,14 @@ function buildSearchUrl(
 }
 
 // ─── Tool definition ──────────────────────────────────────────────
+
+/** Uniform failure return: a text block plus tool details. */
+function fail<T extends object>(text: string, details: T) {
+	return {
+		content: [{ type: "text" as const, text }],
+		details,
+	};
+}
 
 export const webSearchTool = defineTool({
 	name: "web-search",
@@ -309,8 +330,7 @@ export const webSearchTool = defineTool({
 		),
 		engines: Type.Optional(
 			Type.String({
-				description:
-					'Comma-separated upstream search engines (e.g. "google,bing")',
+				description: 'Comma-separated upstream search engines (e.g. "google,bing")',
 			}),
 		),
 	}),
@@ -331,21 +351,15 @@ export const webSearchTool = defineTool({
 		// ── Config check: graceful degradation when unconfigured ──
 		const searxngUrl = readSearxngUrl();
 		if (!searxngUrl) {
-			return {
-				content: [
-					{
-						type: "text" as const,
-						text:
-							"Web search is not configured. " +
-							"Set `searxng.url` in `~/.pi/agent/settings.json` " +
-							"or `.pi/settings.json` to your SearXNG instance URL. " +
-							"For example:\n" +
-							'  ```json\n  { "searxng": { "url": "http://localhost:8888" } }\n  ```\n' +
-							"See the pi-lean-search README for self-host vs public instance options.",
-					},
-				],
-				details: { error: true, unconfigured: true },
-			};
+			return fail(
+				"Web search is not configured. " +
+					"Set `searxng.url` in `~/.pi/agent/settings.json` " +
+					"or `.pi/settings.json` to your SearXNG instance URL. " +
+					"For example:\n" +
+					'  ```json\n  { "searxng": { "url": "http://localhost:8888" } }\n  ```\n' +
+					"See the pi-lean-search README for self-host vs public instance options.",
+				{ unconfigured: true },
+			);
 		}
 
 		// ── Timeout ──
@@ -353,7 +367,6 @@ export const webSearchTool = defineTool({
 
 		// ── Build URL ──
 		const url = buildSearchUrl(searxngUrl, query, {
-			count,
 			pageno,
 			language,
 			safesearch,
@@ -372,10 +385,7 @@ export const webSearchTool = defineTool({
 			});
 		}
 		if (_signal?.aborted) {
-			return {
-				content: [{ type: "text" as const, text: "Web search cancelled." }],
-				details: { cancelled: true },
-			};
+			return fail("Web search cancelled.", { cancelled: true });
 		}
 
 		const timeoutId = setTimeout(() => {
@@ -398,61 +408,32 @@ export const webSearchTool = defineTool({
 					connectionErr.name === "AbortError"
 				) {
 					if (timedOut) {
-						return {
-							content: [
-								{
-									type: "text" as const,
-									text:
-										`Web search timed out after ${timeoutSeconds}s. ` +
-										`The SearXNG instance at \`${searxngUrl}\` may be slow ` +
-										"or unresponsive.",
-								},
-							],
-							details: {
-								error: true,
-								timedOut: true,
-								timeout: timeoutSeconds,
-							},
-						};
+						return fail(
+							`Web search timed out after ${timeoutSeconds}s. ` +
+								`The SearXNG instance at \`${searxngUrl}\` may be slow ` +
+								"or unresponsive.",
+							{ timedOut: true, timeout: timeoutSeconds },
+						);
 					}
-					return {
-						content: [
-							{
-								type: "text" as const,
-								text: "Web search was cancelled.",
-							},
-						],
-						details: { cancelled: true },
-					};
+					return fail("Web search was cancelled.", { cancelled: true });
 				}
-				return {
-					content: [
-						{
-							type: "text" as const,
-							text:
-								"Web search connection failed: " +
-								(connectionErr instanceof Error
-									? connectionErr.message
-									: String(connectionErr)),
-						},
-					],
-					details: { error: true, connectionError: true },
-				};
+				return fail(
+					"Web search connection failed: " +
+						(connectionErr instanceof Error
+							? connectionErr.message
+							: String(connectionErr)),
+					{ connectionError: true },
+				);
 			}
 
 			clearTimeout(timeoutId);
 
 			// ── Layer 2: HTTP error handling ──
 			if (!response.ok) {
-				return {
-					content: [
-						{
-							type: "text" as const,
-							text: `SearXNG error: HTTP ${response.status} ${response.statusText}`,
-						},
-					],
-					details: { error: true, status: response.status },
-				};
+				return fail(
+					`SearXNG error: HTTP ${response.status} ${response.statusText}`,
+					{ status: response.status },
+				);
 			}
 
 			// ── Layer 3: JSON parse error handling ──
@@ -463,20 +444,12 @@ export const webSearchTool = defineTool({
 					? (JSON.parse(text) as SearXNGResponse)
 					: { results: [], answers: [], suggestions: [] };
 			} catch (parseErr) {
-				return {
-					content: [
-						{
-							type: "text" as const,
-							text:
-								"Web search returned unexpected response format. " +
-								"SearXNG may be misconfigured. Error: " +
-								(parseErr instanceof Error
-									? parseErr.message
-									: String(parseErr)),
-						},
-					],
-					details: { error: true, parseError: true },
-				};
+				return fail(
+					"Web search returned unexpected response format. " +
+						"SearXNG may be misconfigured. Error: " +
+						(parseErr instanceof Error ? parseErr.message : String(parseErr)),
+					{ parseError: true },
+				);
 			}
 
 			// ── Deduplicate results by URL ──
@@ -492,8 +465,8 @@ export const webSearchTool = defineTool({
 				(a, b) => (b.score ?? 0) - (a.score ?? 0),
 			);
 
-			// Slice to requested count
-			const results = sortedResults.slice(0, Math.min(count, 100));
+			// Slice to requested count (schema caps `count` at 100, enforced by runtime validation)
+			const results = sortedResults.slice(0, count);
 
 			// Render answer blocks (before empty-results check so answers show even with zero web results)
 			const renderedAnswers = (data.answers ?? []).slice(0, 3);
@@ -551,8 +524,7 @@ export const webSearchTool = defineTool({
 
 			// Suggestions section
 			if (data.suggestions?.length) {
-				const suggestionCount = Math.min(data.suggestions.length, 3);
-				output += `Suggestions: ${data.suggestions.slice(0, suggestionCount).join(", ")}`;
+				output += `Suggestions: ${data.suggestions.slice(0, 3).join(", ")}`;
 			}
 
 			return {
@@ -574,19 +546,13 @@ export const webSearchTool = defineTool({
 			};
 		} catch (unexpectedErr) {
 			clearTimeout(timeoutId);
-			return {
-				content: [
-					{
-						type: "text" as const,
-						text:
-							"An unexpected error occurred during web search: " +
-							(unexpectedErr instanceof Error
-								? unexpectedErr.message
-								: String(unexpectedErr)),
-					},
-				],
-				details: { error: true, unexpectedError: true },
-			};
+			return fail(
+				"An unexpected error occurred during web search: " +
+					(unexpectedErr instanceof Error
+						? unexpectedErr.message
+						: String(unexpectedErr)),
+				{ unexpectedError: true },
+			);
 		}
 	},
 

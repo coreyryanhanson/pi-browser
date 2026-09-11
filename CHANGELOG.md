@@ -306,6 +306,18 @@
 
 ### Fixed
 
+- **Settings readers honor `PI_CODING_AGENT_DIR`** — the global
+  `settings.json` path in `pi-lean-search`'s `search-config.ts` and
+  portal's shared `settings-reader.ts` was hardcoded to `~/.pi/agent`,
+  while their own dependency (`pi-tool-masking`'s `settingsPath()`)
+  honors `PI_CODING_AGENT_DIR`. A user with a relocated agent dir got
+  toolset defaults read from the relocated file but `searxng.url` and
+  `browser` config read from the stale `~/.pi/agent/settings.json` —
+  silent misconfig, no warning. Both readers now resolve
+  `$PI_CODING_AGENT_DIR/settings.json` with the `~/.pi/agent` fallback,
+  matching the library. Portal-owned data directories (profiles,
+  cookies, sessions) are deliberately unchanged.
+
 - **`browser-inspect` `parentRef` chains were never built, so `subtree=`
   found nothing; ancestry now resolves for directly nested interactive
   elements** — both the TypeScript (`core/shared/accessibility-tree.ts`)

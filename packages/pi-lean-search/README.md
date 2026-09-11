@@ -68,9 +68,16 @@ A `web-search` call renders as a numbered list the agent reads:
 
 ```text
 1. Example result title
-   https://example.com/page — one-line snippet from the page
+   https://example.com/page
+   one-line snippet from the page
+   [engine] | score: 1.00
 2. …
 ```
+
+The snippet line is omitted when the page has no content. The
+`[engine] | score:` suffix appears when the result carries engine/score
+metadata; the engine tag itself is shown only when multiple results are
+requested.
 
 SearXNG instant answers (calculator, weather, translations) are passed
 through when the query triggers them.

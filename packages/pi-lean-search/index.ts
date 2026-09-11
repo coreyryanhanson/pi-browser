@@ -23,7 +23,7 @@ import {
 } from "pi-tool-masking";
 import type { ToolsetSpec, ToolsetChangedEvent } from "pi-tool-masking";
 import { readSearxngUrl } from "./search-config.js";
-import { webSearchTool } from "./web-search-tool.js";
+import { webSearchTool, normalizeBaseUrl } from "./web-search-tool.js";
 
 // ─── Toolset spec ────────────────────────────────────────────────
 
@@ -54,63 +54,34 @@ let _lastCtx: ExtensionContext | null = null;
 // ─── Health probes ───────────────────────────────────────────────
 
 /**
- * Lightweight server probe — fetches the SearXNG root HTML page.
- * Fast (~ms) because it only needs the HTTP response, not the full
- * aggregation pipeline.
+ * Shared probe — fetch a URL with a timeout, report reachability.
+ * With `parseJson`, additionally require the body to parse as JSON
+ * (full-pipeline check: triggers SearXNG upstream aggregation, slower).
  */
-async function checkServerReachable(
+async function probe(
 	url: string,
-	signal?: AbortSignal,
+	timeoutMs: number,
+	signal: AbortSignal | undefined,
+	opts?: { parseJson?: boolean },
 ): Promise<boolean> {
 	try {
 		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 2000);
+		const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
 		let res: Response;
 		try {
 			const mergedSignal = signal
 				? AbortSignal.any([signal, controller.signal])
 				: controller.signal;
-			res = await fetch(url, { signal: mergedSignal });
+			const init: RequestInit = { signal: mergedSignal };
+			if (opts?.parseJson) init.headers = { Accept: "application/json" };
+			res = await fetch(url, init);
 		} finally {
 			clearTimeout(timeoutId);
 		}
 
-		return res.ok && res.status === 200;
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Full-pipeline probe — verifies the search API actually works end-to-end.
- * Triggers upstream engine aggregation, so it takes longer (5s timeout).
- */
-async function checkSearchReachable(
-	url: string,
-	signal?: AbortSignal,
-): Promise<boolean> {
-	const normalized = url.replace(/\/+$/, "");
-	const searchUrl = `${normalized}/search?q=ping&format=json`;
-
-	try {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-		let res: Response;
-		try {
-			const mergedSignal = signal
-				? AbortSignal.any([signal, controller.signal])
-				: controller.signal;
-			res = await fetch(searchUrl, {
-				signal: mergedSignal,
-				headers: { Accept: "application/json" },
-			});
-		} finally {
-			clearTimeout(timeoutId);
-		}
-
-		if (!res.ok || res.status !== 200) return false;
+		if (!res.ok) return false;
+		if (!opts?.parseJson) return true;
 		const text = await res.text();
 		if (!text) return false;
 		JSON.parse(text);
@@ -118,6 +89,21 @@ async function checkSearchReachable(
 	} catch {
 		return false;
 	}
+}
+
+/** Lightweight server probe — SearXNG root page, HTTP response only. */
+function checkServerReachable(url: string, signal?: AbortSignal) {
+	return probe(url, 2000, signal);
+}
+
+/** Full-pipeline probe — `/search?q=ping&format=json`, JSON body required. */
+function checkSearchReachable(url: string, signal?: AbortSignal) {
+	return probe(
+		`${normalizeBaseUrl(url)}/search?q=ping&format=json`,
+		5000,
+		signal,
+		{ parseJson: true },
+	);
 }
 
 // ─── Status slot helpers ─────────────────────────────────────────
@@ -311,7 +297,7 @@ export default function (pi: ExtensionAPI) {
 						"Set `searxng.url` in your Pi settings.json.",
 					"error",
 				);
-				_lastHealth = false;
+				_lastHealth = null;
 				renderSearchGlyph(ctx);
 				return;
 			}

@@ -14,8 +14,10 @@ import { join } from "node:path";
 
 // ─── Config paths ─────────────────────────────────────────────────
 
-/** Global pi settings path. */
-const GLOBAL_SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
+/** Global pi settings dir (`$PI_CODING_AGENT_DIR` or `~/.pi/agent`). */
+function globalSettingsDir(): string {
+	return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+}
 
 /** Project pi settings path (relative to cwd). */
 const PROJECT_SETTINGS_PATH = ".pi/settings.json";
@@ -49,7 +51,7 @@ export function readSettingsFile(path: string): Record<string, unknown> {
  * @returns Merged settings object with project values taking precedence
  */
 export function readMergedSettings(
-	globalPath: string = GLOBAL_SETTINGS_PATH,
+	globalPath: string = join(globalSettingsDir(), "settings.json"),
 	projectPath: string = PROJECT_SETTINGS_PATH,
 ): Record<string, unknown> {
 	const global = readSettingsFile(globalPath);

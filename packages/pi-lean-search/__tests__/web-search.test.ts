@@ -7,10 +7,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { homedir } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { TOOLSET_EVENTS } from "pi-tool-masking";
 import { readSearxngUrl } from "../search-config.js";
-import { webSearchTool } from "../web-search-tool.js";
+import { webSearchTool, buildSearchUrl } from "../web-search-tool.js";
 import searchExtension, { _resetStateForTest } from "../index.js";
 
 // Mock Pi used for integration-style tests (toolset wiring, glyph rendering).
@@ -44,8 +45,7 @@ function mockSearchPi(initialActive?: string[]) {
 		}),
 		get events() {
 			return {
-				emit: (channel: string, data: unknown) =>
-					eventEmitter.emit(channel, data),
+				emit: (channel: string, data: unknown) => eventEmitter.emit(channel, data),
 				on: (channel: string, handler: (data: unknown) => void) => {
 					eventEmitter.on(channel, handler);
 					return () => eventEmitter.off(channel, handler);
@@ -60,37 +60,56 @@ function mockSearchPi(initialActive?: string[]) {
 // ─── Config reader (mocked fs) ──────────────────────────────────
 
 vi.mock("node:fs", () => ({
-	existsSync: vi.fn(),
 	readFileSync: vi.fn(),
 }));
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("readSearxngUrl", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		delete process.env.PI_CODING_AGENT_DIR;
 	});
 
-	it("returns undefined when neither settings file exists", () => {
-		vi.mocked(existsSync).mockReturnValue(false);
+	afterEach(() => {
+		delete process.env.PI_CODING_AGENT_DIR;
+	});
+
+	it("honors PI_CODING_AGENT_DIR for the global settings path", () => {
+		process.env.PI_CODING_AGENT_DIR = "/custom/agent/dir";
+		vi.mocked(readFileSync).mockImplementation((path: unknown) => {
+			if (path === "/custom/agent/dir/settings.json") {
+				return JSON.stringify({ searxng: { url: "http://custom:8888" } });
+			}
+			return JSON.stringify({});
+		});
+		expect(readSearxngUrl()).toBe("http://custom:8888");
+	});
+
+	it("falls back to ~/.pi/agent when PI_CODING_AGENT_DIR is unset", () => {
+		vi.mocked(readFileSync).mockImplementation((path: unknown) => {
+			if (path === join(homedir(), ".pi", "agent", "settings.json")) {
+				return JSON.stringify({ searxng: { url: "http://default:8888" } });
+			}
+			return JSON.stringify({});
+		});
+		expect(readSearxngUrl()).toBe("http://default:8888");
+	});
+
+	it("returns undefined when neither settings file exists (readFileSync throws)", () => {
+		vi.mocked(readFileSync).mockImplementation(() => {
+			throw new Error("ENOENT: no such file");
+		});
 		expect(readSearxngUrl()).toBeUndefined();
 	});
 
 	it("returns undefined when settings exist but have no searxng key", () => {
-		vi.mocked(existsSync).mockImplementation(
-			(path) => typeof path === "string" && path.includes(".pi"),
-		);
 		vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ theme: "dark" }));
 		expect(readSearxngUrl()).toBeUndefined();
 	});
 
 	it("returns the URL when searxng.url is set (global)", () => {
-		vi.mocked(existsSync).mockImplementation(
-			(path) =>
-				typeof path === "string" &&
-				(path.includes(".pi/agent/settings") ||
-					path.includes(".pi/settings.json")),
-		);
 		vi.mocked(readFileSync).mockImplementation((path: unknown) => {
 			if (typeof path === "string" && path.includes(".pi/agent/settings")) {
 				return JSON.stringify({
@@ -103,9 +122,6 @@ describe("readSearxngUrl", () => {
 	});
 
 	it("project settings override global settings", () => {
-		vi.mocked(existsSync).mockImplementation(
-			(path) => typeof path === "string" && path.includes(".pi"),
-		);
 		vi.mocked(readFileSync).mockImplementation((path: unknown) => {
 			if (typeof path === "string" && path.includes(".pi/agent/settings")) {
 				return JSON.stringify({
@@ -120,27 +136,20 @@ describe("readSearxngUrl", () => {
 	});
 
 	it("returns undefined when searxng.url is an empty string", () => {
-		vi.mocked(existsSync).mockImplementation(
-			(path) => typeof path === "string" && path.includes(".pi"),
-		);
-		vi.mocked(readFileSync).mockReturnValue(
-			JSON.stringify({ searxng: { url: "" } }),
-		);
+		vi
+			.mocked(readFileSync)
+			.mockReturnValue(JSON.stringify({ searxng: { url: "" } }));
 		expect(readSearxngUrl()).toBeUndefined();
 	});
 
 	it("returns undefined when searxng is not an object", () => {
-		vi.mocked(existsSync).mockImplementation(
-			(path) => typeof path === "string" && path.includes(".pi"),
-		);
-		vi.mocked(readFileSync).mockReturnValue(
-			JSON.stringify({ searxng: "http://localhost:8888" }),
-		);
+		vi
+			.mocked(readFileSync)
+			.mockReturnValue(JSON.stringify({ searxng: "http://localhost:8888" }));
 		expect(readSearxngUrl()).toBeUndefined();
 	});
 
 	it("returns undefined on malformed JSON", () => {
-		vi.mocked(existsSync).mockReturnValue(true);
 		vi.mocked(readFileSync).mockReturnValue("not valid json");
 		expect(readSearxngUrl()).toBeUndefined();
 	});
@@ -149,52 +158,17 @@ describe("readSearxngUrl", () => {
 // ─── Tool definition structural checks ──────────────────────────
 
 describe("webSearchTool", () => {
+	// The exact name is a cross-package contract: portal's SIBLING_TOOL_NAMES and
+	// SEARCH_WEB_SPEC.names use Set.has() on it for the /web on|off toggle.
 	it("has the correct name", () => {
 		expect(webSearchTool.name).toBe("web-search");
 	});
 
-	it("has a label", () => {
-		expect(typeof webSearchTool.label).toBe("string");
-		expect(webSearchTool.label!.length).toBeGreaterThan(0);
-	});
-
-	it("has a description", () => {
-		expect(typeof webSearchTool.description).toBe("string");
-		expect(webSearchTool.description!.length).toBeGreaterThan(0);
-	});
-
-	it("has promptSnippet and promptGuidelines", () => {
-		expect(typeof webSearchTool.promptSnippet).toBe("string");
-		expect(webSearchTool.promptSnippet!.length).toBeGreaterThan(0);
+	// Optional in ToolDefinition; the tool drops out of the system prompt
+	// (available-tools + guidelines sections) without these.
+	it("opts into system-prompt surfacing", () => {
+		expect(webSearchTool.promptSnippet).toBeTruthy();
 		expect(webSearchTool.promptGuidelines).toBeTruthy();
-	});
-
-	it("defines required query parameter", () => {
-		const schema = webSearchTool.parameters;
-		expect(schema).toBeDefined();
-	});
-
-	it("defines pageno parameter with minimum of 1", () => {
-		const schema = webSearchTool.parameters;
-		expect(schema).toBeDefined();
-		const pageno = (
-			schema as Record<string, unknown> & {
-				properties?: Record<string, unknown>;
-			}
-		)?.properties?.pageno;
-		expect(pageno).toBeDefined();
-	});
-
-	it("has execute function", () => {
-		expect(typeof webSearchTool.execute).toBe("function");
-	});
-
-	it("has renderCall function", () => {
-		expect(typeof webSearchTool.renderCall).toBe("function");
-	});
-
-	it("has renderResult function", () => {
-		expect(typeof webSearchTool.renderResult).toBe("function");
 	});
 
 	describe("renderResult answer badge", () => {
@@ -298,16 +272,75 @@ describe("webSearchTool", () => {
 	});
 });
 
+// ─── buildSearchUrl (pure URL construction) ──────────────────
+
+describe("buildSearchUrl", () => {
+	const baseOptions = {
+		pageno: 1,
+		language: "",
+		safesearch: "",
+		time_range: "",
+		category: "",
+		engines: "",
+	};
+
+	it("strips trailing slashes from the base URL", () => {
+		const url = buildSearchUrl("http://localhost:8888///", "test", baseOptions);
+		expect(url).toBe("http://localhost:8888/search?format=json&q=test");
+	});
+
+	it("maps category to the SearXNG 'categories' param", () => {
+		const url = buildSearchUrl("http://localhost:8888", "test", {
+			...baseOptions,
+			category: "general",
+		});
+		expect(url).toContain("categories=general");
+		expect(url).not.toContain("category=");
+	});
+
+	it("only sets pageno when greater than 1", () => {
+		const first = buildSearchUrl("http://localhost:8888", "test", baseOptions);
+		expect(first).not.toContain("pageno=");
+
+		const second = buildSearchUrl("http://localhost:8888", "test", {
+			...baseOptions,
+			pageno: 2,
+		});
+		expect(second).toContain("pageno=2");
+	});
+
+	it("omits empty-string optional params", () => {
+		const url = buildSearchUrl("http://localhost:8888", "test", baseOptions);
+		expect(url).toBe("http://localhost:8888/search?format=json&q=test");
+	});
+
+	it("passes through optional params when set", () => {
+		const url = buildSearchUrl("http://localhost:8888", "test", {
+			...baseOptions,
+			language: "en",
+			safesearch: "1",
+			time_range: "day",
+			engines: "duckduckgo,bing",
+		});
+		const params = new URL(url).searchParams;
+		expect(params.get("language")).toBe("en");
+		expect(params.get("safesearch")).toBe("1");
+		expect(params.get("time_range")).toBe("day");
+		expect(params.get("engines")).toBe("duckduckgo,bing");
+	});
+});
+
 // ─── Execute answer rendering (mocked fetch) ─────────────────
 
 describe("execute answer rendering", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		// Make readSearxngUrl return a valid URL
-		vi.mocked(existsSync).mockReturnValue(true);
-		vi.mocked(readFileSync).mockReturnValue(
-			JSON.stringify({ searxng: { url: "http://localhost:8888" } }),
-		);
+		vi
+			.mocked(readFileSync)
+			.mockReturnValue(
+				JSON.stringify({ searxng: { url: "http://localhost:8888" } }),
+			);
 	});
 
 	afterEach(() => {

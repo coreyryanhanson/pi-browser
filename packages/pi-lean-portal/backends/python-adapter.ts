@@ -559,6 +559,15 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	}
 
 	/**
+	 * Optional `error` field for result mappers, honoring
+	 * `exactOptionalPropertyTypes` (an explicit `undefined` is not assignable
+	 * to an optional property, so the field is spread in only when present).
+	 */
+	private _errorField(raw: Record<string, unknown>): { error?: string } {
+		return raw.error === undefined ? {} : { error: raw.error as string };
+	}
+
+	/**
 	 * Direct JSON-RPC call — does NOT call ensureRunning.
 	 *
 	 * Used internally for startup ping and shutdown, where the process
@@ -772,7 +781,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 					snapshot: (raw.snapshot as string) ?? "",
 					elementCount: (raw.elementCount as number) ?? 0,
 					dialogEvents: (raw.dialogEvents as DialogEvent[]) ?? [],
-					...(raw.error === undefined ? {} : { error: raw.error as string }),
+					...this._errorField(raw),
 				};
 			},
 			(error) => ({
@@ -859,7 +868,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			(raw) => ({
 				success: Boolean(raw.success),
 				dataUri: (raw.dataUri as string) ?? "",
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, dataUri: "", error }),
 		);
@@ -876,7 +885,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			(raw) => ({
 				success: Boolean(raw.success),
 				messages: (raw.messages as ConsoleMessagesResult["messages"]) ?? [],
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, messages: [], error }),
 		);
@@ -907,7 +916,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			(raw) => ({
 				success: Boolean(raw.success),
 				result: raw.result,
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error, result: undefined }),
 		);
@@ -968,7 +977,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			(raw) => ({
 				success: Boolean(raw.success),
 				cookies: (raw.cookies as Cookie[]) ?? [],
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, cookies: [], error }),
 		);
@@ -980,7 +989,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			{ taskId, cookies },
 			(raw) => ({
 				success: Boolean(raw.success),
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error }),
 		);
@@ -1000,7 +1009,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			},
 			(raw) => ({
 				success: Boolean(raw.success),
-				...(raw.error === undefined ? {} : { error: raw.error as string }),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error }),
 		);

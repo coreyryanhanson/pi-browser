@@ -42,7 +42,7 @@ const REQUIRED_OPERATIONS: ReadonlyArray<keyof BrowserPlugin> = [
 export function validatePlugin(plugin: BrowserPlugin): string[] {
 	const missing: string[] = [];
 	for (const op of REQUIRED_OPERATIONS) {
-		if (typeof (plugin as any)[op] !== "function") {
+		if (typeof plugin[op] !== "function") {
 			missing.push(op);
 		}
 	}

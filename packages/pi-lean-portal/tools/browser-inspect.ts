@@ -7,7 +7,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import * as router from "../core/router.js";
 import { taskId } from "../core/shared/task-id.js";
-import { renderExpandedText } from "./utils.js";
+import { contentText, renderExpandedText } from "./utils.js";
 
 export const browserInspectTool = defineTool({
 	name: "browser-inspect",
@@ -122,7 +122,7 @@ export const browserInspectTool = defineTool({
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error) return new Text(theme.fg("error", "Inspect failed"), 0, 0);
-		const content = (result.content?.[0] as any)?.text ?? "";
+		const content = contentText(result);
 		const staleness = d?.stalenessWarning
 			? ` ${theme.fg("warning", "(stale)")}`
 			: "";

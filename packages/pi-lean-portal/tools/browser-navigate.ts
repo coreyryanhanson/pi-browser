@@ -16,6 +16,7 @@ import {
 	updateFooterStatus,
 	profileLine,
 	renderExpandedText,
+	contentText,
 } from "./utils.js";
 
 /**
@@ -158,7 +159,7 @@ export const browserNavigateTool = defineTool({
 			};
 		}
 
-		const contentText = result.snapshot;
+		const snapshot = result.snapshot;
 
 		const screenshotLine = await router.captureScreenshotLine(tid);
 
@@ -186,7 +187,7 @@ export const browserNavigateTool = defineTool({
 				: "",
 			screenshotLine,
 			"",
-			contentText,
+			snapshot,
 		);
 
 		// Append guide footer after page content (only when guides apply)
@@ -224,7 +225,7 @@ export const browserNavigateTool = defineTool({
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error)
 			return new Text(
-				theme.fg("error", `Failed: ${(result.content?.[0] as any)?.text ?? "?"}`),
+				theme.fg("error", `Failed: ${contentText(result, "?")}`),
 				0,
 				0,
 			);
@@ -260,7 +261,7 @@ export const browserNavigateTool = defineTool({
 			text += `\n${theme.fg("muted", chips.join("  "))}`;
 		}
 
-		const content = (result.content?.[0] as any)?.text ?? "";
+		const content = contentText(result);
 		if (expanded) {
 			text += "\n";
 			text = renderExpandedText(text, theme, content, 500);

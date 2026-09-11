@@ -14,7 +14,7 @@
 
 ## `BrowserPlugin` interface (`core/plugin-api.ts`)
 
-19 methods (18 required + 1 optional):
+18 methods (17 required + 1 optional):
 
 ```
 init?(config)       — optional, called once at startup
@@ -28,20 +28,20 @@ evaluate            — JS eval in page
 getElementCache     — for browser-inspect
 cleanup(taskId)     — teardown one session
 getCookies, addCookies, clearCookies  — cookie operations
-getStorageState     — profile storage for session restore
 ```
 
-The 12 registered tools map to 12 tool-facing plugin methods. The cookie/storage methods (`getCookies`, `addCookies`, `clearCookies`, `getStorageState`) are router-facing, not tool-mapped. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 19 methods (18 required + 1 optional).
+The 12 registered tools map to 12 tool-facing plugin methods. The cookie methods (`getCookies`, `addCookies`, `clearCookies`) are router-facing — profile persistence flows through the shared `persistSessionState()` helper in `core/shared/storage-state.ts`. Element cache access (`getElementCache`) is used internally by `browser-inspect`. The lifecycle methods (`init`, `cleanupAll`) are framework-facing. Total interface: 18 methods (17 required + 1 optional).
 
 Capabilities (`PluginCapabilities`) advertise quirks. The router checks them at dispatch time.
 
 ## Status Bar (`browser` slot)
 
-Portal manages the `browser` status bar slot, showing the browser tool toggle state:
+Portal manages the `browser` status bar slot via a single renderer, `updateFooterStatus` in `tools/utils.ts` (also invoked from `browser-toggle.ts` on toolset change/restore events):
 
-- `● idle` (accent/blue) — browser tools enabled
-- `● idle` (success/green) — learn mode enabled
 - `○ web off` — browser tools disabled
+- `● idle` (accent/blue dot) — browser tools enabled, no active sessions
+- `● <session status>` — session-aware body from `sessionManager.getStatus()`: e.g. `PW: example.com [work]` (plugin symbol + domain + named profile tag), `N crashed`, or a per-profile session grouping for multiple active sessions
+- The dot is success/green when learn mode is enabled, accent/blue otherwise
 
 (The `search` slot is owned by `pi-lean-search`; see that package's `AGENTS.md`.)
 
@@ -273,7 +273,7 @@ The monorepo root owns the test split principle and the summary counts table; th
 - **Compact truncation everywhere**: snapshots truncated at ~2500 chars (with `\nfingerprint:XXXXX`), fetch content at ~4000 chars with temp file spill to `/tmp/pi-lean-portal/fetch-*.md`.
 - **Snapshot Disk Cache** (`core/shared/snapshot-cache.ts`): when truncated, full tree written to `/tmp/pi-lean-portal/snapshot-*.txt`. Last 2 files per task. Cached regardless of bot-detection status — the full inline content still passes through on bot pages for human judgment, with the cache file available as a recovery file for the agent. I/O failures degrade gracefully to inline-only.
 - **`browser-inspect`** (`core/shared/dom-extractor.ts`): runs inline JS via `page.evaluate()`. Requires `getElementCache()` on the plugin. Text output truncated at ~2500 chars by default; pass `maxChars=0` for full. Keyword filtering via `query` parameter (case-insensitive substring on text, href, src).
-- **`parentRef` on `AriaCachedNode`**: enables `subtree=...` queries in `browser-inspect`. Set by depth-based parent stack in `parseSnapshot()`'s single pass. Dialogs become parent of interior elements.
+- **`parentRef` on `AriaCachedNode`**: enables `subtree=...` queries in `browser-inspect`. Set by the depth-based parent stack in `parseSnapshot()`'s single pass — it is the nearest *interactive* ancestor, only recorded when that ancestor is at the immediately enclosing level. Informational wrappers (`main`, `region`, `group`, `complementary`) get no `@e` ref, so they create a gap and the wrapped element's `parentRef` is `undefined`.
 - **`dialogDetected` is resolved from element cache**: computed from the parsed `ElementCache` via `Array.some()` matching `role="dialog"` or `role="alertdialog"`. Not affected by snapshot truncation (unlike the old string-scan approach).
 - **Guide staleness**: no builtin site guides shipped — entirely user-authored via `~/.pi/agent/pi-lean-portal/web-guides/*.md`. User `.md` files override builtins by name collision (the file name minus `.md` becomes the guide key; a user `bot-detection.md` shadows the builtin `bot-detection` pattern). Guides carry `updated` date and `currentDate` timestamp in output.
 - **Learn mode toggle**: `/web learn` enables `web-learn` tool; `/web on` removes it. Agent never calls `web-learn` unprompted. Default is off on fresh sessions.

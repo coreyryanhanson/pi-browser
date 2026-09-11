@@ -29,7 +29,6 @@ import {
 	type Cookie,
 	type CookieResult,
 	type ClearCookiesOptions,
-	type StorageStateResult,
 	type ResultBase,
 } from "../core/plugin-api.js";
 import type { AriaCachedNode } from "../core/shared/accessibility-tree.js";
@@ -193,15 +192,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	private _elementCaches = new Map<string, Map<string, AriaCachedNode>>();
 
 	/**
-	 * Per-taskId page metadata.
-	 * Used to track profile names for storage state save on cleanup.
+	 * TaskIds with a live page session in the bridge.
 	 */
-	private _pages = new Map<
-		string,
-		{
-			profileName?: string;
-		}
-	>();
+	private _pages = new Set<string>();
 
 	/**
 	 * @param name  Unique plugin identifier (e.g. "chromium-py").
@@ -212,9 +205,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 
 		// Validate bridge script exists
 		if (!config.bridgeScript) {
-			throw new Error(
-				`PythonPluginAdapter('${name}'): bridgeScript is required`,
-			);
+			throw new Error(`PythonPluginAdapter('${name}'): bridgeScript is required`);
 		}
 		if (!existsSync(config.bridgeScript)) {
 			throw new Error(
@@ -268,7 +259,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	 * Clean up ALL resources.  Closes all pages, then sends ``shutdown`` to the bridge.
 	 */
 	async cleanupAll(): Promise<void> {
-		for (const taskId of [...this._pages.keys()]) {
+		for (const taskId of [...this._pages]) {
 			await this.cleanup(taskId).catch(() => {});
 		}
 		await this._stopProcess();
@@ -568,6 +559,15 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	}
 
 	/**
+	 * Optional `error` field for result mappers, honoring
+	 * `exactOptionalPropertyTypes` (an explicit `undefined` is not assignable
+	 * to an optional property, so the field is spread in only when present).
+	 */
+	private _errorField(raw: Record<string, unknown>): { error?: string } {
+		return raw.error === undefined ? {} : { error: raw.error as string };
+	}
+
+	/**
 	 * Direct JSON-RPC call — does NOT call ensureRunning.
 	 *
 	 * Used internally for startup ping and shutdown, where the process
@@ -699,21 +699,14 @@ export class PythonPluginAdapter implements BrowserPlugin {
 		options?: {
 			signal?: AbortSignal;
 			storageState?: unknown;
-			profileName?: string;
-			profileMode?: "none" | "session" | "named";
 		},
 	): Promise<NavigateResult> {
 		// AbortSignal not wired through JSON-RPC; accepted for interface compatibility.
 
 		try {
-			// Build RPC params — include storageState and profileName if provided
 			const rpcParams: Record<string, unknown> = { url, taskId, timeoutMs };
 			if (options?.storageState !== undefined) {
 				rpcParams.storageState = options.storageState;
-			}
-			if (options?.profileName !== undefined) {
-				rpcParams.profileName = options.profileName;
-				rpcParams.profileMode = options.profileMode ?? "named";
 			}
 
 			// ── Persist state before re-navigate (if session exists) ──
@@ -734,14 +727,10 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			);
 
 			const result = raw as Record<string, unknown>;
-			const success = !!result.success;
+			const success = Boolean(result.success);
 
 			// Track this task for cleanup
-			const pageMeta: { profileName?: string } = {};
-			if (options?.profileName) {
-				pageMeta.profileName = options.profileName;
-			}
-			this._pages.set(taskId, pageMeta);
+			this._pages.add(taskId);
 
 			// Update session manager
 			if (success) {
@@ -788,11 +777,11 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				// Populate local element cache from bridge response
 				this._populateElementCache(taskId, raw.elements);
 				return {
-					success: !!raw.success,
+					success: Boolean(raw.success),
 					snapshot: (raw.snapshot as string) ?? "",
 					elementCount: (raw.elementCount as number) ?? 0,
 					dialogEvents: (raw.dialogEvents as DialogEvent[]) ?? [],
-					...(raw.error !== undefined ? { error: raw.error as string } : {}),
+					...this._errorField(raw),
 				};
 			},
 			(error) => ({
@@ -871,16 +860,15 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	): Promise<ScreenshotResult> {
 		// If capabilities don't support fullPage, never pass it
 		const fullPage =
-			this.capabilities.supportsFullPageScreenshot &&
-			options?.fullPage === true;
+			this.capabilities.supportsFullPageScreenshot && options?.fullPage === true;
 
 		return this._rpcCallTyped(
 			"browser.screenshot",
 			{ taskId, fullPage },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				dataUri: (raw.dataUri as string) ?? "",
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, dataUri: "", error }),
 		);
@@ -895,9 +883,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.getConsoleMessages",
 			{ taskId },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				messages: (raw.messages as ConsoleMessagesResult["messages"]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, messages: [], error }),
 		);
@@ -926,9 +914,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				? { taskId, expression }
 				: { taskId, expression, readOnly },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				result: raw.result,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error, result: undefined }),
 		);
@@ -954,14 +942,15 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			{},
 			(raw): QuirksDescriptor => ({
 				success: true,
-				fingerprint_managed_context: !!raw.fingerprint_managed_context,
+				fingerprint_managed_context: Boolean(raw.fingerprint_managed_context),
 				eval_prefix: (raw.eval_prefix as string) ?? "",
-				scroll_via_wheel: !!raw.scroll_via_wheel,
-				skip_default_viewport: !!raw.skip_default_viewport,
-				skip_networkidle: !!raw.skip_networkidle,
-				wrap_mw_eval_in_eval: !!raw.wrap_mw_eval_in_eval,
-				csp_safe_readonly_via_init_script:
-					!!raw.csp_safe_readonly_via_init_script,
+				scroll_via_wheel: Boolean(raw.scroll_via_wheel),
+				skip_default_viewport: Boolean(raw.skip_default_viewport),
+				skip_networkidle: Boolean(raw.skip_networkidle),
+				wrap_mw_eval_in_eval: Boolean(raw.wrap_mw_eval_in_eval),
+				csp_safe_readonly_via_init_script: Boolean(
+					raw.csp_safe_readonly_via_init_script,
+				),
 			}),
 			(error): QuirksDescriptor => ({
 				success: false,
@@ -986,9 +975,9 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.getCookies",
 			{ taskId, ...(urls ? { urls } : {}) },
 			(raw) => ({
-				success: !!raw.success,
+				success: Boolean(raw.success),
 				cookies: (raw.cookies as Cookie[]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, cookies: [], error }),
 		);
@@ -999,8 +988,8 @@ export class PythonPluginAdapter implements BrowserPlugin {
 			"browser.addCookies",
 			{ taskId, cookies },
 			(raw) => ({
-				success: !!raw.success,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				success: Boolean(raw.success),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error }),
 		);
@@ -1019,24 +1008,10 @@ export class PythonPluginAdapter implements BrowserPlugin {
 				...(options?.path ? { path: options.path } : {}),
 			},
 			(raw) => ({
-				success: !!raw.success,
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
+				success: Boolean(raw.success),
+				...this._errorField(raw),
 			}),
 			(error) => ({ success: false, error }),
-		);
-	}
-
-	async getStorageState(taskId: string): Promise<StorageStateResult> {
-		return this._rpcCallTyped(
-			"browser.getStorageState",
-			{ taskId },
-			(raw) => ({
-				success: !!raw.success,
-				cookies: (raw.cookies as StorageStateResult["cookies"]) ?? [],
-				origins: (raw.origins as StorageStateResult["origins"]) ?? [],
-				...(raw.error !== undefined ? { error: raw.error as string } : {}),
-			}),
-			(error) => ({ success: false, cookies: [], origins: [], error }),
 		);
 	}
 
@@ -1045,8 +1020,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	// ═════════════════════════════════════════════════════════════════
 
 	async cleanup(taskId: string): Promise<void> {
-		const pageEntry = this._pages.get(taskId);
-		if (!pageEntry) {
+		if (!this._pages.has(taskId)) {
 			this._elementCaches.delete(taskId);
 			return;
 		}
@@ -1230,7 +1204,7 @@ export class PythonPluginAdapter implements BrowserPlugin {
 	private _toInteractionResult(raw: unknown): InteractionResult {
 		const r = raw as Record<string, unknown>;
 		const result: InteractionResult = {
-			success: !!r.success,
+			success: Boolean(r.success),
 		};
 		if (r.newUrl != null) result.newUrl = r.newUrl as string;
 		if (r.newTitle != null) result.newTitle = r.newTitle as string;

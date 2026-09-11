@@ -41,8 +41,7 @@
 		"!backends/python-base/**/*.egg-info/",
 		"core/",
 		"tools/",
-		"README.md",
-		"ship-manifest.test.ts"
+		"README.md"
 	],
 	"pi": {
 		"extensions": [

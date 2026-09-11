@@ -161,13 +161,9 @@ export function profileFilePath(profileName: string): string {
  * Logs a warning if the version is higher than the current code understands.
  *
  * @param profileName - The profile name.
- * @param maxSizeBytes - Optional size limit for warning (default: 10 MB).
  * @returns The parsed storage state, or null if no file exists.
  */
-export function loadStorageState(
-	profileName: string,
-	_maxSizeBytes: number = DEFAULT_MAX_STORAGE_STATE_SIZE,
-): StorageStateFile | null {
+export function loadStorageState(profileName: string): StorageStateFile | null {
 	const path = profileFilePath(profileName);
 
 	if (!existsSync(path)) {
@@ -239,10 +235,7 @@ function sweepOrphanedTempFiles(dir: string): void {
 		if (!existsSync(dir)) return;
 		const entries = readdirSync(dir);
 		for (const entry of entries) {
-			if (
-				entry.startsWith(TEMP_FILE_PREFIX) &&
-				entry.endsWith(TEMP_FILE_SUFFIX)
-			) {
+			if (entry.startsWith(TEMP_FILE_PREFIX) && entry.endsWith(TEMP_FILE_SUFFIX)) {
 				try {
 					unlinkSync(join(dir, entry));
 				} catch {
@@ -498,7 +491,17 @@ export async function persistSessionState(
 }
 
 /**
+ * Get a human-readable label for a profile name.
+ * Session-scoped profiles render as "📋 session"; others show their name.
+ */
+export function getProfileLabel(name: string): string {
+	if (isSessionProfile(name)) return "📋 session";
+	return name;
+}
+
+/**
  * Check whether a profile name follows the session-scoped naming convention.
+
  *
  * Session profiles start with `SESSION_PROFILE_PREFIX` (`_session-`) and
  * encode the pi session ID. They are auto-created for `profile="session"`
@@ -523,9 +526,7 @@ export function isSessionProfile(name: string): boolean {
  */
 export function sessionProfileName(piSessionId: string): string {
 	if (!piSessionId || /[/\\..]/.test(piSessionId)) {
-		throw new Error(
-			`Invalid piSessionId for session profile: '${piSessionId}'`,
-		);
+		throw new Error(`Invalid piSessionId for session profile: '${piSessionId}'`);
 	}
 	return `${SESSION_PROFILE_PREFIX}${piSessionId}`;
 }

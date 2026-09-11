@@ -7,7 +7,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import * as router from "../core/router.js";
 import { taskId } from "../core/shared/task-id.js";
-import { renderExpandedText } from "./utils.js";
+import { contentText, renderExpandedText } from "./utils.js";
 
 export const browserInspectTool = defineTool({
 	name: "browser-inspect",
@@ -34,14 +34,15 @@ export const browserInspectTool = defineTool({
 		),
 		name: Type.Optional(
 			Type.String({
-				description:
-					"Filter by accessible name (case-insensitive substring match)",
+				description: "Filter by accessible name (case-insensitive substring match)",
 			}),
 		),
+		// ponytail: ref+text=true subtree scoping is not implemented (text=true always
+		// extracts the whole page); thread ref through router browserInspect ->
+		// runExtractor -> EXTRACTOR_SCRIPT root element if it's ever needed.
 		ref: Type.Optional(
 			Type.String({
-				description:
-					"Look up a specific @e ref (e.g. 'e5'). When combined with text=true, scopes DOM walker to that element's subtree.",
+				description: "Look up a specific @e ref (e.g. 'e5').",
 			}),
 		),
 		subtree: Type.Optional(
@@ -75,16 +76,16 @@ export const browserInspectTool = defineTool({
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 		const p = params as Record<string, unknown>;
-		const tid = (p?.taskId as string | undefined) ?? taskId(ctx);
+		const tid = taskId(ctx);
 
 		const result = await router.browserInspect(tid, {
-			...(p?.role !== undefined ? { role: p.role as string } : {}),
-			...(p?.name !== undefined ? { name: p.name as string } : {}),
-			...(p?.ref !== undefined ? { ref: p.ref as string } : {}),
-			...(p?.subtree !== undefined ? { subtree: p.subtree as string } : {}),
-			...(p?.text !== undefined ? { text: Boolean(p.text) } : {}),
-			...(p?.maxChars !== undefined ? { maxChars: p.maxChars as number } : {}),
-			...(p?.query !== undefined ? { query: p.query as string } : {}),
+			...(p?.role === undefined ? {} : { role: p.role as string }),
+			...(p?.name === undefined ? {} : { name: p.name as string }),
+			...(p?.ref === undefined ? {} : { ref: p.ref as string }),
+			...(p?.subtree === undefined ? {} : { subtree: p.subtree as string }),
+			...(p?.text === undefined ? {} : { text: Boolean(p.text) }),
+			...(p?.maxChars === undefined ? {} : { maxChars: p.maxChars as number }),
+			...(p?.query === undefined ? {} : { query: p.query as string }),
 		});
 
 		if (!result.success) {
@@ -121,7 +122,7 @@ export const browserInspectTool = defineTool({
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error) return new Text(theme.fg("error", "Inspect failed"), 0, 0);
-		const content = (result.content?.[0] as any)?.text ?? "";
+		const content = contentText(result);
 		const staleness = d?.stalenessWarning
 			? ` ${theme.fg("warning", "(stale)")}`
 			: "";

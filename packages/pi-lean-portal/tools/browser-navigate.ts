@@ -16,7 +16,31 @@ import {
 	updateFooterStatus,
 	profileLine,
 	renderExpandedText,
+	contentText,
 } from "./utils.js";
+
+/**
+ * Builder for the browser-navigate `strategy` parameter description, listing
+ * the actually-configured plugin names so the agent doesn't second-guess
+ * which strategies exist (matches what /web status reports).
+ *
+ * index.ts patches the tool schema with this at registration time; it lives
+ * here so the wording stays next to the tool it describes.
+ */
+export function strategyDescription(
+	enabled: string[],
+	disabled: string[],
+): string {
+	const availList = enabled.length > 0 ? enabled.join(", ") : "(none)";
+	const disabledClause =
+		disabled.length > 0 ? ` Disabled: ${disabled.join(", ")}.` : "";
+	return (
+		`Backend strategy: "auto" (default) uses the first available plugin; ` +
+		`specify a registered plugin name to use that backend. ` +
+		`Available: ${availList}.${disabledClause} ` +
+		`For stateless HTTP fetches, use web-fetch instead.`
+	);
+}
 
 export const browserNavigateTool = defineTool({
 	name: "browser-navigate",
@@ -38,10 +62,9 @@ export const browserNavigateTool = defineTool({
 		url: Type.String({ description: "The URL to navigate to" }),
 		strategy: Type.Optional(
 			Type.String({
-				description:
-					'Backend strategy: "auto" (default) uses the first available plugin; ' +
-					'specify a registered plugin name (e.g. "chromium", "firefox", "chromium-py") to use that backend. ' +
-					"For stateless HTTP fetches, use web-fetch instead.",
+				// Placeholder — index.ts overwrites this with strategyDescription()
+				// (configured plugin names) before registerTool, so it never renders.
+				description: 'Backend strategy: "auto" or a registered plugin name.',
 			}),
 		),
 		timeout: Type.Optional(
@@ -52,15 +75,12 @@ export const browserNavigateTool = defineTool({
 			}),
 		),
 		profile: Type.Optional(
-			Type.Union(
-				[Type.Literal("none"), Type.Literal("session"), Type.String()],
-				{
-					description:
-						"Profile mode: 'session' (default, persist for this conversation), " +
-						"'none' (clean slate), or a named profile (e.g. 'shopping', 'work'). " +
-						"Named profiles share cookies across subagents like browser tabs.",
-				},
-			),
+			Type.Union([Type.Literal("none"), Type.Literal("session"), Type.String()], {
+				description:
+					"Profile mode: 'session' (default, persist for this conversation), " +
+					"'none' (clean slate), or a named profile (e.g. 'shopping', 'work'). " +
+					"Named profiles share cookies across subagents like browser tabs.",
+			}),
 		),
 	}),
 
@@ -139,7 +159,7 @@ export const browserNavigateTool = defineTool({
 			};
 		}
 
-		const contentText = result.snapshot;
+		const snapshot = result.snapshot;
 
 		const screenshotLine = await router.captureScreenshotLine(tid);
 
@@ -156,10 +176,10 @@ export const browserNavigateTool = defineTool({
 			`Title: ${result.title || "(no title)"}`,
 			`URL: ${result.url}`,
 			`Backend: ${result.backendUsed}`,
-			result.elementCount !== undefined
-				? `Interactive elements: ${result.elementCount}`
-				: "",
-			result.profileMode !== undefined ? profileLine(result) : "",
+			result.elementCount === undefined
+				? ""
+				: `Interactive elements: ${result.elementCount}`,
+			result.profileMode === undefined ? "" : profileLine(result),
 			result.botDetectionWarning
 				? "⚠ BOT DETECTION WARNING: This page appears to be protected by " +
 						"anti-automation. The content below may be incomplete or show " +
@@ -167,7 +187,7 @@ export const browserNavigateTool = defineTool({
 				: "",
 			screenshotLine,
 			"",
-			contentText,
+			snapshot,
 		);
 
 		// Append guide footer after page content (only when guides apply)
@@ -205,10 +225,7 @@ export const browserNavigateTool = defineTool({
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error)
 			return new Text(
-				theme.fg(
-					"error",
-					`Failed: ${(result.content?.[0] as any)?.text ?? "?"}`,
-				),
+				theme.fg("error", `Failed: ${contentText(result, "?")}`),
 				0,
 				0,
 			);
@@ -244,7 +261,7 @@ export const browserNavigateTool = defineTool({
 			text += `\n${theme.fg("muted", chips.join("  "))}`;
 		}
 
-		const content = (result.content?.[0] as any)?.text ?? "";
+		const content = contentText(result);
 		if (expanded) {
 			text += "\n";
 			text = renderExpandedText(text, theme, content, 500);

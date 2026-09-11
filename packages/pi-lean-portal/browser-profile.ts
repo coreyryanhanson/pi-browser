@@ -20,6 +20,7 @@ import {
 	isSessionProfile,
 	sanitizeProfileName,
 	profileDir,
+	getProfileLabel,
 } from "./core/shared/storage-state.js";
 import { formatBytes } from "./core/shared/paths.js";
 
@@ -52,12 +53,11 @@ export function listProfiles(): Array<{
 	try {
 		if (!existsSync(PROFILE_DIR)) return [];
 		const entries = readdirSync(PROFILE_DIR, { withFileTypes: true });
-		const profiles = entries
-			.filter((e) => e.isDirectory() && !e.name.startsWith("."))
-			.map((e) => ({
-				name: e.name,
-				stateSize: profileStateSize(e.name),
-			}));
+		const profiles = entries.flatMap((e) =>
+			e.isDirectory() && !e.name.startsWith(".")
+				? [{ name: e.name, stateSize: profileStateSize(e.name) }]
+				: [],
+		);
 		profiles.sort((a, b) => a.name.localeCompare(b.name));
 		return profiles;
 	} catch {
@@ -65,14 +65,8 @@ export function listProfiles(): Array<{
 	}
 }
 
-/**
- * Short human-readable label for a profile name.
- * Session-scoped profiles show "📋" instead of the raw `_session-` prefix.
- * Named profiles show as-is.
- */
 export function profileLabel(name: string): string {
-	if (isSessionProfile(name)) return "📋 session";
-	return name;
+	return getProfileLabel(name);
 }
 
 /**

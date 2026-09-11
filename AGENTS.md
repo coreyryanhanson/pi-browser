@@ -73,7 +73,7 @@ pi-lean-dimension/                       (monorepo root)
 
 ## Architecture (suite-level overview)
 
-Portal dispatches through a `PluginRegistry` + typed `BrowserPlugin` interface; `web-fetch` is stateless. All backends implement the same 19-method interface, so the 12 browser tools are backend-agnostic.
+Portal dispatches through a `PluginRegistry` + typed `BrowserPlugin` interface; `web-fetch` is stateless. All backends implement the same 18-method interface, so the 12 browser tools are backend-agnostic.
 
 **Shipped backends (config-driven):** `chromium` (Node, enabled), `firefox` (Node, enabled), `chromium-py` (Python, disabled), `firefox-py` (Python, disabled). User-installed stealth backends (e.g. Camoufox) are never shipped, never auto-downloaded, and loaded only when explicitly listed with an absolute `pythonPath` — see `packages/pi-lean-portal/AGENTS.md` ("Stealth backends") and `packages/pi-lean-portal/contributed/README.md`.
 

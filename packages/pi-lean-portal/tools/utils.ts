@@ -5,10 +5,26 @@
  * Includes taskId resolution, status bar updates, and profile line formatting.
  */
 
-import type { ExtensionAPI, ThemeColor } from "@earendil-works/pi-coding-agent";
+import type {
+	AgentToolResult,
+	ExtensionAPI,
+	ThemeColor,
+} from "@earendil-works/pi-coding-agent";
 import { getToggleState, getLearnState } from "../browser-toggle.js";
 import { sessionManager } from "../core/shared/session-manager.js";
 import { taskId } from "../core/shared/task-id.js";
+
+/**
+ * Extract the text of the first text-content block from a tool result.
+ * Returns `fallback` when the result has no text content.
+ */
+export function contentText(
+	result: AgentToolResult<unknown> | undefined,
+	fallback = "",
+): string {
+	const first = result?.content?.[0];
+	return first?.type === "text" ? first.text : fallback;
+}
 
 // ─── Status bar ─────────────────────────────────────────────────
 
@@ -171,5 +187,3 @@ export function renderExpandedText(
 		text += `\n${theme.fg("muted", `… ${content.length - limit} more chars`)}`;
 	return text;
 }
-
-export type { ExtensionAPI };

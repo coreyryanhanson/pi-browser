@@ -19,7 +19,7 @@ import { NAV_SETTLE } from "./browser-data.js";
  */
 export interface NavigationSettlePage {
 	url(): string;
-	mainFrame(): unknown;
+	mainFrame(): object;
 	on(event: string, handler: (...args: unknown[]) => void): void;
 	off(event: string, handler: (...args: unknown[]) => void): void;
 	waitForTimeout(ms: number): Promise<void>;
@@ -159,14 +159,14 @@ export async function waitForNavigationSettle(
 		if (navigated) {
 			await waitForPageReady(page, navTimeout);
 			waitedForLoad = true;
-		} else if (page.url() !== urlBefore) {
-			// URL changed without a framenavigated event (possible edge case).
-			await waitForPageReady(page, navTimeout);
-			waitedForLoad = true;
-		} else {
+		} else if (page.url() === urlBefore) {
 			// No navigation detected yet — allow client-side rerenders /
 			// scrolling to settle before reading the snapshot.
 			await page.waitForTimeout(settleTimeout);
+		} else {
+			// URL changed without a framenavigated event (possible edge case).
+			await waitForPageReady(page, navTimeout);
+			waitedForLoad = true;
 		}
 
 		// Late-arrival gate: a navigation may have started during the settle

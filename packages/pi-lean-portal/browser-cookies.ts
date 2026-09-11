@@ -79,6 +79,11 @@ export async function handleCookiesSubcommand(
 		}
 		ctx.ui.notify("Cleared all cookies for the current session.", "info");
 	} else {
+		// ponytail: `add` not implemented — router.addCookies() and profile
+		// persistence already work, so this needs only an interactive TUI
+		// (paste cookie JSON, pick current session or a named profile) plus an
+		// export-format converter (Chrome/Firefox JSON → Playwright Cookie:
+		// expirationDate→expires, sameSite casing, drop hostOnly/storeId).
 		ctx.ui.notify(
 			`Unknown cookies sub-command: "${sub}". ` +
 				`Usage: /web cookies [list|clear [--confirm]]`,

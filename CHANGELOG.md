@@ -220,6 +220,21 @@
 
 ### Changed
 
+- **`pi-lean-portal` — `BrowserPlugin.getStorageState` removed from the
+  plugin interface** — it had no production caller: profile persistence
+  routes through the shared `persistSessionState()` helper, and the
+  Python adapter talks to the `browser.getStorageState` RPC directly.
+  Custom Node backends in `user-backends/` should drop the method from
+  their implementation. Nothing else changes — cookies keep their own
+  `getCookies`/`addCookies`/`clearCookies` methods.
+
+- **`pi-lean-portal` — plugin validation hard-requires more operations** —
+  `REQUIRED_OPERATIONS` (`core/plugin-registry.ts`) now also rejects a
+  backend missing `getElementCache`, `getCookies`, `addCookies`,
+  `clearCookies`, or `cleanupAll` at load time. Custom Node backends in
+  `user-backends/` that previously registered while missing any of these
+  must implement them.
+
 - **`pi-lean-search` — unconfigured-SearXNG startup notice** — when
   `searxng.url` is unset, the `search` status bar slot stays hidden
   (existing behavior) but a one-time warning notify now fires on Pi
@@ -291,6 +306,42 @@
 
 ### Fixed
 
+- **`browser-inspect` `parentRef` chains were never built, so `subtree=`
+  found nothing; ancestry now resolves for directly nested interactive
+  elements** — both the TypeScript (`core/shared/accessibility-tree.ts`)
+  and Python (`pi_browser_bridge/accessibility.py`) ARIA parsers treated the
+  raw leading-space count of an `ariaSnapshot()` line as a nesting-level
+  index. Playwright emits 2 spaces per level, so in the TypeScript parser
+  `parentStack[depth - 1]` read an array hole and `parentRef` was never
+  assigned for any nested element (`subtree=` ancestry silently found
+  nothing), while the Python parser's append-based stack invented ancestry —
+  siblings claimed each other as parents, so `subtree=` returned elements
+  from outside the container. Both parsers now normalize depth to the
+  nesting level (spaces ÷ 2), and the Python parent stack pads skipped
+  levels (non-interactive containers create gaps) with `None`, matching the
+  TS hole-filled array. Re-emitted snapshot indentation no longer doubles on
+  nested elements, and sibling elements can no longer pass a `parentRef`
+  chain check. Regression tests cover nested, sibling, and skip-level
+  hierarchies on both runtimes.
+- **`browser` status slot no longer flip-flops between renderers** —
+  `updateFooterStatus` (`tools/utils.ts`) and `renderBrowserGlyph`
+  (`browser-toggle.ts`) both wrote to the `browser` status slot from the
+  same cached flags but emitted different strings (`● idle` vs
+  `● PW: example.com [profile]`), so the display depended on which path
+  ran last. The session-aware renderer is now the only one:
+  `renderBrowserGlyph` is deleted, `syncCachedState` calls
+  `updateFooterStatus` on toolset toggle/restore events, and the portal
+  `AGENTS.md` status-bar section reflects the session-aware format.
+- **Snapshot shutdown no longer deletes other sessions' temp files** —
+  `removeAllSnapshotFiles()` performed a recursive delete of the shared
+  temp dir (`/tmp/pi-lean-portal`), which also contained other running
+  sessions' fetch spill files and screenshots, so one conversation's
+  shutdown could break another's in-flight reads. It now removes only
+  the snapshot files it tracks. Tracked-file cleanup (hash prefix,
+  per-task tracking, best-effort removal) is consolidated into a shared
+  `core/shared/temp-files.ts` used by both the snapshot cache and the
+  fetch backend; stale orphan files from crashed sessions now live
+  until normal `/tmp` cleanup instead of being swept at shutdown.
 - **Reserved-char pre-scan is now block-scalar aware** — `parse-api-guide`'s
   frontmatter pre-scan for plain scalars starting with a reserved YAML
   character no longer misreads the continuation lines of a folded/literal
@@ -299,6 +350,26 @@
   `` `all:` `` field prefixes) were being rejected as malformed even though
   the YAML parsed cleanly; they now load normally. Genuine plain-scalar
   offenders are still flagged in one pass.
+
+- **`browser-inspect` schema no longer promises unsupported `ref` +
+  `text=true` subtree scoping** — the `ref` description claimed that
+  combining it with `text=true` scopes the DOM walker to that element's
+  subtree, but `text=true` always extracts the whole page (`params.ref`
+  is only consumed on the element-query path). The description is
+  corrected; scoping remains a possible future feature.
+
+- **`/web profile` restore now picks the newest choice, not the oldest** —
+  `restoreProfile()` in `browser-toggle.ts` returned on the **first**
+  `portal-conversation-state` entry found in the session branch, but
+  `getBranch()` walks chronologically root→leaf — so after switching
+  profiles mid-conversation (e.g. `/web profile work` →
+  `/web profile shopping`), a `/reload`, `/resume`, or branch switch via
+  `/tree` silently restored the **first** profile chosen in the session
+  instead of the most recent one. The loop now keeps walking and the last
+  valid entry wins, matching pi's own session-persistence convention
+  (last-writer-wins) and fixing restore on both `session_start` and
+  `session_tree`. Covered by a new regression test feeding two
+  chronological entries and asserting the newest wins.
 
 ## [0.4.0] - 2026-08-02
 

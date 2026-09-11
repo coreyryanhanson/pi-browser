@@ -14,7 +14,7 @@ import type { PluginConfig } from "./plugin-config.js";
 
 // ─── Validation ───────────────────────────────────────────────────
 
-/** The required operation method names (tool-mapped only; lifecycle, cookie, storage excluded) */
+/** Every method the router/lifecycle dispatches unconditionally (init is optional) */
 const REQUIRED_OPERATIONS: ReadonlyArray<keyof BrowserPlugin> = [
 	"navigate",
 	"snapshot",
@@ -28,6 +28,11 @@ const REQUIRED_OPERATIONS: ReadonlyArray<keyof BrowserPlugin> = [
 	"clearConsole",
 	"evaluate",
 	"cleanup",
+	"getElementCache",
+	"getCookies",
+	"addCookies",
+	"clearCookies",
+	"cleanupAll",
 ];
 
 /**
@@ -37,7 +42,7 @@ const REQUIRED_OPERATIONS: ReadonlyArray<keyof BrowserPlugin> = [
 export function validatePlugin(plugin: BrowserPlugin): string[] {
 	const missing: string[] = [];
 	for (const op of REQUIRED_OPERATIONS) {
-		if (typeof (plugin as any)[op] !== "function") {
+		if (typeof plugin[op] !== "function") {
 			missing.push(op);
 		}
 	}

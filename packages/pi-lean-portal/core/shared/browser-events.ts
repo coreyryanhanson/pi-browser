@@ -21,15 +21,7 @@ export interface DialogLogEntry {
 }
 
 export interface ConsoleEvent {
-	type:
-		| "log"
-		| "warn"
-		| "error"
-		| "info"
-		| "debug"
-		| "dir"
-		| "trace"
-		| "assert";
+	type: "log" | "warn" | "error" | "info" | "debug" | "dir" | "trace" | "assert";
 	text: string;
 	timestamp: number;
 }
@@ -48,6 +40,11 @@ export function getDialogLog(taskId: string): DialogLogEntry[] {
 /** Get console messages for a task */
 export function getConsoleLog(taskId: string): ConsoleEvent[] {
 	return _consoleLog.get(taskId) ?? [];
+}
+
+/** Clear dialog log for a task */
+export function clearDialogLog(taskId: string): void {
+	_dialogLog.delete(taskId);
 }
 
 /** Clear console log for a task */

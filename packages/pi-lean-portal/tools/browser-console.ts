@@ -24,8 +24,7 @@ export const browserConsoleTool = defineTool({
 		),
 		clear: Type.Optional(
 			Type.Boolean({
-				description:
-					"If true, clear the captured console log (no other action)",
+				description: "If true, clear the captured console log (no other action)",
 			}),
 		),
 	}),
@@ -34,9 +33,8 @@ export const browserConsoleTool = defineTool({
 		const p = params as {
 			expression?: string;
 			clear?: boolean;
-			taskId?: string;
 		};
-		const tid = p?.taskId ?? taskId(ctx);
+		const tid = taskId(ctx);
 
 		if (p?.clear) {
 			await router.clearConsole(tid);
@@ -146,10 +144,7 @@ export const browserConsoleTool = defineTool({
 		if (d?.cleared) return new Text(theme.fg("dim", "Console cleared"), 0, 0);
 		if (d?.result !== undefined)
 			return new Text(
-				theme.fg(
-					"dim",
-					`JS → ${JSON.stringify(d.result)?.slice(0, 80) || "ok"}`,
-				),
+				theme.fg("dim", `JS → ${JSON.stringify(d.result)?.slice(0, 80) || "ok"}`),
 				0,
 				0,
 			);

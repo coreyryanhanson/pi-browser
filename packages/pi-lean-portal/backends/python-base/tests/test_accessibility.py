@@ -7,19 +7,16 @@ interactive and informational role, edge cases, and output format
 conformance with the TypeScript version.
 """
 
-
 import pytest
 
 from pi_browser_bridge.accessibility import (
-    AriaCachedNode,
-    AriaParseResult,
-    parse_snapshot,
-    build_locator_args,
-    _parse_line,
-    INTERACTIVE_ROLES,
     INFORMATIONAL_ROLES,
+    INTERACTIVE_ROLES,
+    AriaCachedNode,
+    _parse_line,
+    build_locator_args,
+    parse_snapshot,
 )
-
 
 # ═════════════════════════════════════════════════════════════════════
 #  _parse_line
@@ -67,7 +64,7 @@ class TestParseLine:
         assert result.name == ""
 
     def test_role_with_hyphen(self) -> None:
-        result = _parse_line("- menu-item " ' "Save"')
+        result = _parse_line('- menu-item  "Save"')
         assert result is not None
         assert result.role == "menu-item"
         assert result.name == "Save"
@@ -161,10 +158,10 @@ class TestParseSnapshotHierarchy:
     SNAP = (
         '- navigation "Main"\n'
         "  - link Home\n"
-        "    - button \"About\"\n"
+        '    - button "About"\n'
         '- main "Content"\n'
         "  - heading : Welcome\n"
-        "    - paragraph \"Intro text\"\n"
+        '    - paragraph "Intro text"\n'
         "  - button Get Started"
     )
 
@@ -194,11 +191,12 @@ class TestParseSnapshotHierarchy:
         result = parse_snapshot(self.SNAP)
         # paragraph should appear in output but without @e ref
         assert "paragraph" in result.text
-        assert "@e" not in (
-            line
-            for line in result.text.split("\n")
-            if "paragraph" in line
-        ).__iter__().__next__()
+        assert (
+            "@e"
+            not in (
+                line for line in result.text.split("\n") if "paragraph" in line
+            ).__iter__().__next__()
+        )
 
     def test_heading_gets_ref(self) -> None:
         result = parse_snapshot(self.SNAP)
@@ -336,12 +334,17 @@ class TestParseSnapshotOutputFormat:
         result = parse_snapshot(snap)
         lines = result.text.split("\n")
         assert len(lines) == 4
-        # Indentation: depth represents raw space count. The indent unit
-        # is "  " (2 spaces), so output uses depth*2 spaces per level.
+        # Indentation: depth is the nesting level; the indent unit is "  "
+        # (2 spaces per level, matching Playwright's aria_snapshot() output).
         assert lines[0] == '@e1 🧭 navigation "Main"'
-        assert lines[1] == '    @e2 🔗 link "Home"'   # depth=2 → 4 spaces
-        assert lines[2] == '        @e3 🔘 button "About"'  # depth=4 → 8 spaces
-        assert lines[3] == '    @e4 🔘 button "Search"'   # depth=2 → 4 spaces
+        assert lines[1] == '  @e2 🔗 link "Home"'  # level 1 → 2 spaces
+        assert lines[2] == '    @e3 🔘 button "About"'  # level 2 → 4 spaces
+        assert lines[3] == '  @e4 🔘 button "Search"'  # level 1 → 2 spaces
+        # parentRef chains: Home and Search are children of Main,
+        # About is a child of Home.
+        assert result.elements["e2"].parent_ref == "e1"
+        assert result.elements["e3"].parent_ref == "e2"
+        assert result.elements["e4"].parent_ref == "e1"
 
 
 # ── Roundtrip with element cache ──────────────────────────────────
@@ -362,7 +365,18 @@ class TestParseSnapshotElementCache:
     def test_cache_depth(self) -> None:
         snap = "  - button Nested"
         result = parse_snapshot(snap)
-        assert result.elements["e1"].depth == 2
+        # 2 leading spaces = nesting level 1
+        assert result.elements["e1"].depth == 1
+
+    def test_skipped_level_no_sibling_bleed(self) -> None:
+        # A non-interactive container (main) creates a level gap; the second
+        # button must not claim the first (its sibling) as parent.
+        snap = (
+            '- dialog "Confirm":\n  - main:\n    - button "Save"\n    - button "Cancel"'
+        )
+        result = parse_snapshot(snap)
+        assert result.elements["e2"].parent_ref is None
+        assert result.elements["e3"].parent_ref is None
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -383,7 +397,7 @@ class TestBuildLocatorArgs:
         role, kwargs = build_locator_args(node)
         assert role == "button"
         assert kwargs["name"] == "Click"
-        assert kwargs["exact"] == True
+        assert kwargs["exact"] is True
         assert kwargs["occurrenceIndex"] == 0
 
     def test_heading_with_level(self) -> None:
@@ -395,7 +409,7 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- heading "Title" [level=2]',
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["level"] == 2
         assert kwargs["name"] == "Title"
 
@@ -408,8 +422,8 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- checkbox "Agree" [checked]',
         )
-        role, kwargs = build_locator_args(node)
-        assert kwargs["checked"] == True
+        _role, kwargs = build_locator_args(node)
+        assert kwargs["checked"] is True
 
     def test_mixed_checkbox(self) -> None:
         node = AriaCachedNode(
@@ -420,7 +434,7 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- checkbox "Partial" [checked=mixed]',
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["checked"] == "mixed"
 
     def test_expanded(self) -> None:
@@ -432,8 +446,8 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- treeitem "Node" [expanded=true]',
         )
-        role, kwargs = build_locator_args(node)
-        assert kwargs["expanded"] == True
+        _role, kwargs = build_locator_args(node)
+        assert kwargs["expanded"] is True
 
     def test_collapsed(self) -> None:
         node = AriaCachedNode(
@@ -444,9 +458,9 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- treeitem "Node" [expanded=false, selected]',
         )
-        role, kwargs = build_locator_args(node)
-        assert kwargs["expanded"] == False
-        assert kwargs["selected"] == True
+        _role, kwargs = build_locator_args(node)
+        assert kwargs["expanded"] is False
+        assert kwargs["selected"] is True
 
     def test_disabled(self) -> None:
         node = AriaCachedNode(
@@ -457,8 +471,8 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- button "Save" [disabled]',
         )
-        role, kwargs = build_locator_args(node)
-        assert kwargs["disabled"] == True
+        _role, kwargs = build_locator_args(node)
+        assert kwargs["disabled"] is True
 
     def test_pressed(self) -> None:
         node = AriaCachedNode(
@@ -469,8 +483,8 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- button "Toggle" [pressed]',
         )
-        role, kwargs = build_locator_args(node)
-        assert kwargs["pressed"] == True
+        _role, kwargs = build_locator_args(node)
+        assert kwargs["pressed"] is True
 
     def test_pressed_mixed(self) -> None:
         node = AriaCachedNode(
@@ -481,7 +495,7 @@ class TestBuildLocatorArgs:
             depth=0,
             raw='- button "Toggle" [pressed=mixed]',
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["pressed"] == "mixed"
 
     def test_long_name_no_exact(self) -> None:
@@ -494,9 +508,9 @@ class TestBuildLocatorArgs:
             depth=0,
             raw=f'- link "{long}"',
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["name"] == long
-        assert kwargs["exact"] == False
+        assert kwargs["exact"] is False
 
     def test_includes_occurrence_index_unique(self) -> None:
         """build_locator_args includes occurrenceIndex=0 for unique elements."""
@@ -508,7 +522,7 @@ class TestBuildLocatorArgs:
             depth=0,
             raw="- button Click",
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["occurrenceIndex"] == 0
 
     def test_includes_occurrence_index_duplicate(self) -> None:
@@ -522,7 +536,7 @@ class TestBuildLocatorArgs:
             raw='- link "Promoted"',
             occurrence_index=2,
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert kwargs["occurrenceIndex"] == 2
 
     def test_occurrence_index_is_int(self) -> None:
@@ -536,7 +550,7 @@ class TestBuildLocatorArgs:
             raw="- button Save",
             occurrence_index=0,
         )
-        role, kwargs = build_locator_args(node)
+        _role, kwargs = build_locator_args(node)
         assert isinstance(kwargs["occurrenceIndex"], int)
 
 
@@ -572,13 +586,7 @@ class TestParseSnapshotOccurrenceIndex:
 
     def test_independent_groups(self) -> None:
         """Each (role, name) pair is tracked independently."""
-        snap = "\n".join([
-            '- link "Home"',
-            '- link "Promoted"',
-            '- button "Home"',
-            '- link "Promoted"',
-            '- link "Home"',
-        ])
+        snap = '- link "Home"\n- link "Promoted"\n- button "Home"\n- link "Promoted"\n- link "Home"'
         result = parse_snapshot(snap)
         assert result.elements["e1"].occurrence_index == 0  # link "Home" #1
         assert result.elements["e2"].occurrence_index == 0  # link "Promoted" #1
@@ -587,11 +595,7 @@ class TestParseSnapshotOccurrenceIndex:
         assert result.elements["e5"].occurrence_index == 1  # link "Home" #2
 
     def test_empty_name_duplicates(self) -> None:
-        snap = "\n".join([
-            '- link',
-            '- link',
-            '- link "Labeled"',
-        ])
+        snap = '- link\n- link\n- link "Labeled"'
         result = parse_snapshot(snap)
         # Two empty-name links are duplicates
         assert result.elements["e1"].name == ""
@@ -603,13 +607,8 @@ class TestParseSnapshotOccurrenceIndex:
 
     def test_interactive_only(self) -> None:
         """Informational roles don't get @e refs, don't affect occurrence tracking."""
-        snap = "\n".join([
-            '- paragraph "text"',
-            '- link "Promoted"',
-            '- link "Promoted"',
-        ])
+        snap = '- paragraph "text"\n- link "Promoted"\n- link "Promoted"'
         result = parse_snapshot(snap)
         assert result.count == 2
         assert result.elements["e1"].occurrence_index == 0  # first link
         assert result.elements["e2"].occurrence_index == 1  # second link
-

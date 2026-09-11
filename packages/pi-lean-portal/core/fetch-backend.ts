@@ -13,14 +13,19 @@
  *
  */
 
-import { writeFileSync, rmSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import {
 	BROWSER_TEMP_DIR,
 	safeTaskId,
 	ensureBrowserTempDir,
 	formatBytes,
 } from "./shared/paths.js";
+import {
+	sha256Prefix,
+	cutAtNewline,
+	trackTempFile,
+	cleanupTrackedTempFiles,
+} from "./shared/temp-files.js";
 import TurndownService from "turndown";
 import { parse as parseHtml } from "node-html-parser";
 import { checkPage } from "./shared/bot-detection.js";
@@ -83,7 +88,6 @@ async function performFetch(
 	timeoutMs: number = 30_000,
 	signal?: AbortSignal,
 ): Promise<{
-	html: string;
 	title: string;
 	needsJavaScript: boolean;
 	root: ReturnType<typeof parseHtml>;
@@ -122,7 +126,7 @@ async function performFetch(
 		const title = extractTitle(root);
 		const needsJavaScript = detectNeedsJavaScript(root);
 
-		return { html, title, needsJavaScript, root };
+		return { title, needsJavaScript, root };
 	} finally {
 		clearTimeout(timeoutId);
 	}
@@ -228,18 +232,12 @@ const activeFetchFiles = new Map<string, string[]>();
 function writeFetchTempFile(content: string, taskId: string): string {
 	ensureBrowserTempDir();
 
-	const hash = createHash("sha256").update(content).digest("hex").slice(0, 8);
+	const hash = sha256Prefix(content);
 	const safe = safeTaskId(taskId);
 	const filePath = `${BROWSER_TEMP_DIR}/fetch-${safe}-${hash}.md`;
 
 	writeFileSync(filePath, content, "utf-8");
 	return filePath;
-}
-
-function trackFetchFile(taskId: string, filePath: string): void {
-	const existing = activeFetchFiles.get(taskId) ?? [];
-	if (!existing.includes(filePath)) existing.push(filePath);
-	activeFetchFiles.set(taskId, existing);
 }
 
 interface CappedFetchContent {
@@ -256,10 +254,9 @@ function capFetchContent(content: string, taskId: string): CappedFetchContent {
 	}
 
 	const filePath = writeFetchTempFile(content, taskId);
-	trackFetchFile(taskId, filePath);
+	trackTempFile(activeFetchFiles, taskId, filePath);
 
-	let cut = content.lastIndexOf("\n", COMPACT_FETCH_LIMIT);
-	if (cut < COMPACT_FETCH_LIMIT / 2) cut = COMPACT_FETCH_LIMIT;
+	const cut = cutAtNewline(content, COMPACT_FETCH_LIMIT);
 
 	const inline =
 		content.slice(0, cut) +
@@ -273,28 +270,7 @@ function capFetchContent(content: string, taskId: string): CappedFetchContent {
  * If taskId is provided, only removes files for that task.
  */
 export function cleanupFetchTempFiles(taskId?: string): void {
-	if (taskId) {
-		const paths = activeFetchFiles.get(taskId) ?? [];
-		for (const p of paths) {
-			try {
-				rmSync(p, { force: true });
-			} catch {
-				/* best-effort */
-			}
-		}
-		activeFetchFiles.delete(taskId);
-	} else {
-		for (const [, paths] of activeFetchFiles) {
-			for (const p of paths) {
-				try {
-					rmSync(p, { force: true });
-				} catch {
-					/* best-effort */
-				}
-			}
-		}
-		activeFetchFiles.clear();
-	}
+	cleanupTrackedTempFiles(activeFetchFiles, taskId);
 }
 
 /**
@@ -327,7 +303,6 @@ export async function webFetch(
 
 	// Step 1: Perform fetch
 	let result: {
-		html: string;
 		title: string;
 		needsJavaScript: boolean;
 		root: ReturnType<typeof parseHtml>;
@@ -335,9 +310,7 @@ export async function webFetch(
 	let statusCode: number | undefined;
 
 	try {
-		const fetchResult = await performFetch(url, timeout, options.signal);
-		result = fetchResult;
-		statusCode = 200;
+		result = await performFetch(url, timeout, options.signal);
 	} catch (err: unknown) {
 		if (err instanceof DOMException && err.name === "AbortError") {
 			return {
@@ -363,7 +336,7 @@ export async function webFetch(
 				content: msg,
 				backendUsed: "fetch",
 				error: msg,
-				...(statusCode !== undefined ? { statusCode } : {}),
+				...(statusCode === undefined ? {} : { statusCode }),
 			};
 		}
 
@@ -394,26 +367,10 @@ export async function webFetch(
 	const tid = options.taskId ?? "web-fetch-default";
 	const { inline, filePath, totalChars } = capFetchContent(markdown, tid);
 
-	// Assemble result
-	const lines: string[] = [];
-	if (result.title) lines.push(`Title: ${result.title}`);
-	lines.push(`URL: ${url}`);
-	lines.push(
-		result.needsJavaScript
-			? "⚠ This page appears to need JavaScript for full rendering."
-			: "",
-	);
-	if (botDetected)
-		lines.push(
-			"⚠ Bot detection triggered, the page may be blocking automation. Try browser-navigate instead, ideally with a stealth backend if one is configured.",
-		);
-	lines.push(statusCode ? `HTTP ${statusCode}` : "");
-	lines.push("");
-
-	const headerLines = lines.filter(Boolean).join("\n");
+	// Header (Title/URL/warnings) is assembled by the web-fetch tool — content is Markdown only
 	const content = filePath
-		? `📄 Full content saved to ${filePath} (${formatBytes(totalChars)}). Use read with offset/limit to access specific sections — do not read the entire file at once.\n\n${headerLines}\n\n${inline}`
-		: `${headerLines}\n\n${inline}`;
+		? `📄 Full content saved to ${filePath} (${formatBytes(totalChars)}). Use read with offset/limit to access specific sections — do not read the entire file at once.\n\n${inline}`
+		: inline;
 
 	return {
 		success: true,
@@ -423,7 +380,6 @@ export async function webFetch(
 		backendUsed: "fetch",
 		...(result.needsJavaScript ? { needsJavaScript: true } : {}),
 		...(botDetected ? { botDetected: true } : {}),
-		...(statusCode !== undefined ? { statusCode } : {}),
 		...(filePath ? { filePath } : {}),
 		totalChars,
 	};

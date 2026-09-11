@@ -69,10 +69,16 @@ interface RawPluginEntry {
 	config?: unknown;
 }
 
+/** A validated plugin config with its resolved entry-point detection */
+export type ResolvedPluginConfig = PluginConfig & {
+	/** Result of detectPluginType() for this plugin's dir */
+	detection: PluginDetection;
+};
+
 /** Result of loading and validating the plugin config */
 export interface PluginConfigLoadResult {
-	/** Validated plugin configs in order */
-	plugins: PluginConfig[];
+	/** Validated plugin configs (with resolved entry points) in order */
+	plugins: ResolvedPluginConfig[];
 	/** Validation errors (non-fatal — logged but not thrown) */
 	errors: string[];
 }
@@ -162,8 +168,14 @@ export function parsePluginConfig(
 	// Extract plugins from the raw browser config section
 	const rawPlugins = raw?.["plugins"];
 
-	// Default fallback: chromium + firefox enabled, python backends disabled
+	// Default fallback: chromium + firefox enabled, python backends disabled.
+	// Entry points are constructed directly (not via detectPluginType) — the
+	// shipped backends live deterministically under roots[0], and the fs mock
+	// in plugin-config-browser.test.ts keeps existsSync false, so no fs probes
+	// here. If a shipped dir is genuinely missing, the Node import in index.ts
+	// fails with its own error handling.
 	if (!Array.isArray(rawPlugins)) {
+		const shippedRoot = roots[0] ?? "";
 		return {
 			plugins: [
 				{
@@ -171,24 +183,40 @@ export function parsePluginConfig(
 					dir: "chromium",
 					enabled: true,
 					config: {},
+					detection: {
+						type: "node",
+						entryPoint: join(shippedRoot, "chromium", "index.ts"),
+					},
 				},
 				{
 					name: "firefox",
 					dir: "firefox",
 					enabled: true,
 					config: {},
+					detection: {
+						type: "node",
+						entryPoint: join(shippedRoot, "firefox", "index.ts"),
+					},
 				},
 				{
 					name: "chromium-py",
 					dir: "chromium-py",
 					enabled: false,
 					config: {},
+					detection: {
+						type: "python",
+						entryPoint: join(shippedRoot, "chromium-py", "bridge.py"),
+					},
 				},
 				{
 					name: "firefox-py",
 					dir: "firefox-py",
 					enabled: false,
 					config: {},
+					detection: {
+						type: "python",
+						entryPoint: join(shippedRoot, "firefox-py", "bridge.py"),
+					},
 				},
 			],
 			errors: [],
@@ -197,21 +225,21 @@ export function parsePluginConfig(
 
 	// Validate each entry
 	const seenNames = new Set<string>();
-	const plugins: PluginConfig[] = [];
+	const plugins: ResolvedPluginConfig[] = [];
 
 	for (let i = 0; i < rawPlugins.length; i++) {
 		const validated = validateEntry(rawPlugins[i], i, errors, seenNames);
 		if (validated) {
-			// Also validate that the directory exists and is unambiguous
+			// Also validate that the directory exists and is unambiguous,
+			// keeping the detection result so callers don't re-detect
 			try {
-				detectPluginType(validated.dir, roots);
+				const detection = detectPluginType(validated.dir, roots);
+				plugins.push({ ...validated, detection });
 			} catch (err) {
 				errors.push(
 					`plugins[${i}] ('${validated.name}'): ${err instanceof Error ? err.message : String(err)}`,
 				);
-				continue; // Skip this plugin
 			}
-			plugins.push(validated);
 		}
 	}
 
@@ -286,9 +314,7 @@ function validateEntry(
 	seenNames: Set<string>,
 ): PluginConfig | null {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-		errors.push(
-			`plugins[${index}]: Entry must be an object, got ${typeof raw}`,
-		);
+		errors.push(`plugins[${index}]: Entry must be an object, got ${typeof raw}`);
 		return null;
 	}
 

@@ -252,33 +252,33 @@ describe("formatCacheNotice()", () => {
 			path: "/tmp/pi-lean-portal/snapshot-test-abc123-0.txt",
 			fingerprint: "abc123",
 		};
-		const notice = formatCacheNotice(cacheResult, 5000, true);
+		const notice = formatCacheNotice(cacheResult, 5000);
 		expect(notice).toContain("Full snapshot cached at");
 		expect(notice).toContain(cacheResult.path);
 		expect(notice).toContain("use browser-inspect");
 	});
 
 	it("returns fallback hint when cacheResult is null but snapshot was truncated", () => {
-		const notice = formatCacheNotice(null, 5000, true);
+		const notice = formatCacheNotice(null, 5000);
 		expect(notice).toContain("use browser-inspect");
 		expect(notice).toContain("full=true");
 		expect(notice).not.toContain("Full snapshot cached at");
 	});
 
-	it.each([
-		[100, false],
-		[2000, true],
-	])("returns empty string for non-cache notice input %#", (snapshotLength, truncated) => {
-		const notice = formatCacheNotice(null, snapshotLength, truncated);
-		expect(notice).toBe("");
-	});
+	it.each([100, 2000])(
+		"returns empty string when snapshot length %i is below the truncate threshold",
+		(snapshotLength) => {
+			const notice = formatCacheNotice(null, snapshotLength);
+			expect(notice).toBe("");
+		},
+	);
 
 	it("includes the absolute file path in the notice", () => {
 		const cacheResult: CacheResult = {
 			path: "/tmp/pi-lean-portal/snapshot-test-abc123-0.txt",
 			fingerprint: "abc123",
 		};
-		const notice = formatCacheNotice(cacheResult, 5000, true);
+		const notice = formatCacheNotice(cacheResult, 5000);
 		expect(notice).toMatch(/\/tmp\/pi-lean-portal\/snapshot-/);
 	});
 
@@ -287,7 +287,7 @@ describe("formatCacheNotice()", () => {
 			path: "/tmp/pi-lean-portal/snapshot-test-abc123-0.txt",
 			fingerprint: "abc123",
 		};
-		const notice = formatCacheNotice(cacheResult, 5000, true, 42);
+		const notice = formatCacheNotice(cacheResult, 5000, 42);
 		expect(notice).toContain("42 elements total");
 		expect(notice).toContain("use browser-inspect");
 	});
@@ -297,20 +297,20 @@ describe("formatCacheNotice()", () => {
 			path: "/tmp/pi-lean-portal/snapshot-test-abc123-0.txt",
 			fingerprint: "abc123",
 		};
-		const notice = formatCacheNotice(cacheResult, 5000, true, 0);
+		const notice = formatCacheNotice(cacheResult, 5000, 0);
 		expect(notice).toContain("Full snapshot cached at");
 		expect(notice).toContain("use browser-inspect");
 		expect(notice).not.toContain("elements total");
 	});
 
 	it("fallback hint includes both browser-inspect and full=true guidance", () => {
-		const notice = formatCacheNotice(null, 5000, true);
+		const notice = formatCacheNotice(null, 5000);
 		expect(notice).toContain("use browser-inspect role=... name=...");
 		expect(notice).toContain("use browser-snapshot full=true");
 	});
 
 	it("fallback hint returns empty when snapshot not truncated", () => {
-		const notice = formatCacheNotice(null, 100, false);
+		const notice = formatCacheNotice(null, 100);
 		expect(notice).toBe("");
 	});
 });

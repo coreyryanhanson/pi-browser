@@ -27,7 +27,7 @@ const BODY_ONLY_SIGNALS = BOT_SIGNALS.bodyOnlySignals;
  * Body-only regex patterns — compiled from shared data at module load.
  */
 const BODY_ONLY_PATTERNS: RegExp[] = BOT_SIGNALS.bodyOnlyPatterns.map(
-	(src) => new RegExp(src, "i"),
+	(src) => new RegExp(src, "i"), // pi-lens-ignore: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 );
 
 /**

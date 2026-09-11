@@ -5,7 +5,6 @@ import { cleanupFetchTempFiles } from "./core/fetch-backend.js";
 import { pluginRegistry } from "./core/plugin-registry.js";
 import {
 	loadFullConfig,
-	detectPluginType,
 	DEFAULT_BACKEND_ROOTS,
 	invalidateConfigCache,
 } from "./core/plugin-config.js";
@@ -25,6 +24,7 @@ import { registerGuideProvider } from "./core/guides.js";
 
 import {
 	browserNavigateTool,
+	strategyDescription,
 	browserSnapshotTool,
 	browserClickTool,
 	browserTypeTool,
@@ -55,7 +55,9 @@ export default function (pi: ExtensionAPI) {
 	// Resolve plugin `dir` values against the shipped backends root first,
 	// then the user-writable `~/.pi/agent/pi-lean-portal/user-backends/`
 	// tree.  An absolute `dir` short-circuits both roots.
-	const { plugins: pluginConfigs, errors: configErrors } = loadFullConfig(
+	// Configs come pre-validated with resolved entry points from
+	// parsePluginConfig (detectPluginType runs once per plugin, there).
+	const { plugins: validConfigs, errors: configErrors } = loadFullConfig(
 		DEFAULT_BACKEND_ROOTS,
 	).plugins;
 
@@ -64,32 +66,12 @@ export default function (pi: ExtensionAPI) {
 		console.warn(`[pi-lean-portal] Plugin config error: ${err}`);
 	}
 
-	// ── First pass: collect and validate all configs ──────────────
-	// (synchronous — ensures config array order is captured before any async work)
-	const validConfigs: Array<{
-		config: (typeof pluginConfigs)[number];
-		detection: import("./core/plugin-config.js").PluginDetection;
-	}> = [];
-
-	for (const config of pluginConfigs) {
-		let detection;
-		try {
-			detection = detectPluginType(config.dir, DEFAULT_BACKEND_ROOTS);
-		} catch (err) {
-			console.error(
-				`[pi-lean-portal] Plugin '${config.name}' (dir: '${config.dir}'): ${err instanceof Error ? err.message : String(err)}`,
-			);
-			continue;
-		}
-		validConfigs.push({ config, detection });
-	}
-
 	// ── Seed registry with config array order ────────────────────
 	// This preserves the user's declared priority even when some
 	// plugins load asynchronously (Node via dynamic import) while
 	// others register synchronously (Python adapter).
 	if (validConfigs.length > 0) {
-		pluginRegistry.seedOrder(validConfigs.map(({ config }) => config.name));
+		pluginRegistry.seedOrder(validConfigs.map((c) => c.name));
 	} else {
 		// Fallback: no valid configs → register default Chromium plugin
 		const plugin = new ChromiumPlugin();
@@ -119,7 +101,7 @@ export default function (pi: ExtensionAPI) {
 	// Python plugins register synchronously here.
 	// The pre-seeded ordering ensures all plugins keep their configured
 	// position regardless of when register() is called.
-	for (const { config, detection } of validConfigs) {
+	for (const { detection, ...config } of validConfigs) {
 		if (detection.type === "node") {
 			// Node-based backend — dynamically import the detected plugin
 			(async () => {
@@ -154,10 +136,8 @@ export default function (pi: ExtensionAPI) {
 			// Merge any user-provided config overrides
 			if (config.config) {
 				const userConfig = config.config as Partial<PythonBridgeConfig>;
-				if (userConfig.pythonPath)
-					bridgeConfig.pythonPath = userConfig.pythonPath;
-				if (userConfig.pythonArgs)
-					bridgeConfig.pythonArgs = userConfig.pythonArgs;
+				if (userConfig.pythonPath) bridgeConfig.pythonPath = userConfig.pythonPath;
+				if (userConfig.pythonArgs) bridgeConfig.pythonArgs = userConfig.pythonArgs;
 				if (userConfig.capabilities)
 					bridgeConfig.capabilities = userConfig.capabilities;
 				if (userConfig.transportTimeoutMs)
@@ -190,33 +170,28 @@ export default function (pi: ExtensionAPI) {
 	// --- Register tools ---------------------------------------------
 	// Patch the browser-navigate strategy description with the actually
 	// configured plugin names so the agent doesn't second-guess which
-	// strategies exist (matches what /web status reports).
+	// strategies exist (matches what /web status reports). Wording lives in
+	// strategyDescription() next to the tool; index.ts only supplies the data.
 	const strategyPlugins =
 		validConfigs.length > 0
-			? validConfigs.map(({ config }) => ({
-					name: config.name,
-					enabled: config.enabled,
-				}))
+			? validConfigs.map(({ name, enabled }) => ({ name, enabled }))
 			: [{ name: "chromium", enabled: true }]; // fallback path
-	const enabledNames = strategyPlugins
-		.filter((p) => p.enabled)
-		.map((p) => p.name);
-	const disabledNames = strategyPlugins
-		.filter((p) => !p.enabled)
-		.map((p) => p.name);
-	const availList =
-		enabledNames.length > 0 ? enabledNames.join(", ") : "(none)";
-	const disabledClause =
-		disabledNames.length > 0 ? ` Disabled: ${disabledNames.join(", ")}.` : "";
+	const enabledNames: string[] = [];
+	const disabledNames: string[] = [];
+	for (const { name, enabled } of strategyPlugins)
+		(enabled ? enabledNames : disabledNames).push(name);
+	// SAFETY: defineTool's return type doesn't expose the TypeBox schema as
+	// mutable, but `parameters` is the live Type.Object literal whose
+	// properties.strategy.description exists at runtime; patching it before
+	// registerTool is the whole point (see strategyDescription).
 	(
 		browserNavigateTool as unknown as {
 			parameters: { properties: { strategy: { description: string } } };
 		}
-	).parameters.properties.strategy.description =
-		`Backend strategy: "auto" (default) uses the first available plugin; ` +
-		`specify a registered plugin name to use that backend. ` +
-		`Available: ${availList}.${disabledClause} ` +
-		`For stateless HTTP fetches, use web-fetch instead.`;
+	).parameters.properties.strategy.description = strategyDescription(
+		enabledNames,
+		disabledNames,
+	);
 
 	pi.registerTool(webFetchTool);
 	pi.registerTool(browserNavigateTool);

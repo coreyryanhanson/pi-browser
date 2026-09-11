@@ -6,7 +6,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type, StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import * as router from "../core/router.js";
-import { executeInteractionTool } from "./utils.js";
+import { contentText, executeInteractionTool } from "./utils.js";
 
 export const browserScrollTool = defineTool({
 	name: "browser-scroll",
@@ -42,12 +42,17 @@ export const browserScrollTool = defineTool({
 
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
-		if (d?.error) return new Text(theme.fg("error", "Scroll failed"), 0, 0);
+		if (d?.error)
+			return new Text(
+				theme.fg("error", contentText(result, "Scroll failed")),
+				0,
+				0,
+			);
 		const ec = d?.elementCount as number | undefined;
 		return new Text(
 			theme.fg(
 				"dim",
-				`↕ ${d?.direction || "?"}${ec !== undefined ? ` · ${ec} elements` : ""}`,
+				`↕ ${d?.direction || "?"}${ec === undefined ? "" : ` · ${ec} elements`}`,
 			),
 			0,
 			0,

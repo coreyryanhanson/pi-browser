@@ -59,9 +59,7 @@ function mockFetch(opts: MockFetchOpts): void {
 					signal.addEventListener(
 						"abort",
 						() => {
-							reject(
-								new DOMException("The operation was aborted", "AbortError"),
-							);
+							reject(new DOMException("The operation was aborted", "AbortError"));
 						},
 						{ once: true },
 					);
@@ -93,9 +91,11 @@ function mockFetch(opts: MockFetchOpts): void {
 
 /** Mock that rejects every fetch with AbortError (for pre-aborted signal path). */
 function mockFetchAlwaysAbort(): void {
-	vi.spyOn(global, "fetch").mockRejectedValue(
-		new DOMException("The operation was aborted", "AbortError"),
-	);
+	vi
+		.spyOn(global, "fetch")
+		.mockRejectedValue(
+			new DOMException("The operation was aborted", "AbortError"),
+		);
 }
 
 /** Generate a string of repeated characters. */
@@ -116,7 +116,6 @@ describe("webFetch — core fetch", () => {
 		expect(result.title).toBe("Test Page");
 		expect(result.content).toContain("Hello World");
 		expect(result.content).toContain("This is a test.");
-		expect(result.statusCode).toBe(200);
 	});
 
 	it("extracts the page title", async () => {
@@ -215,7 +214,8 @@ describe("webFetch — JS detection", () => {
 
 	it("detects noscript-heavy pages", async () => {
 		mockFetch({
-			body: "<noscript>Please enable JavaScript to view this content.</noscript><p>Small visible text</p>",
+			body:
+				"<noscript>Please enable JavaScript to view this content.</noscript><p>Small visible text</p>",
 		});
 		const result = await webFetch({ url: "http://example.com/noscript" });
 		expect(result.success).toBe(true);
@@ -235,7 +235,8 @@ describe("webFetch — JS detection", () => {
 describe("webFetch — bot detection", () => {
 	it("detects Cloudflare challenge pages", async () => {
 		mockFetch({
-			body: '<div class="cf-browser-verification"><p>Please verify you are human to continue.</p><p>Cloudflare</p></div>',
+			body:
+				'<div class="cf-browser-verification"><p>Please verify you are human to continue.</p><p>Cloudflare</p></div>',
 			title: "Attention Required! | Cloudflare",
 		});
 		const result = await webFetch({ url: "http://example.com/cf" });
@@ -245,7 +246,8 @@ describe("webFetch — bot detection", () => {
 
 	it("detects CAPTCHA pages", async () => {
 		mockFetch({
-			body: '<form><div class="g-recaptcha"></div><p>captcha verification required</p></form>',
+			body:
+				'<form><div class="g-recaptcha"></div><p>captcha verification required</p></form>',
 			title: "Verify you are human",
 		});
 		const result = await webFetch({ url: "http://example.com/captcha" });

@@ -1,5 +1,9 @@
+import { getProfileLabel } from "./storage-state.js";
+
 /**
  * Session manager — tracks browser session lifecycle per task_id.
+
+
  *
  * Design: sessions track metadata; browsers and contexts are managed
  * entirely by the plugin. The session manager is Playwright-agnostic.
@@ -20,8 +24,6 @@ export interface BrowserSession {
 	cachePopulatedAt?: number;
 	/** Timestamp of the last interaction that may have mutated the DOM */
 	lastInteractionAt?: number;
-	/** Timestamp of last activity */
-	lastActive: number;
 	/** Whether the session has crashed and needs recovery */
 	crashed: boolean;
 	/** Whether to auto-save storage state on cleanup */
@@ -53,14 +55,12 @@ class SessionManager {
 			existing.pluginName = pluginName;
 			delete existing.currentUrl;
 			delete existing.currentTitle;
-			existing.lastActive = Date.now();
 			existing.crashed = false;
 			return existing;
 		}
 		const session: BrowserSession = {
 			taskId,
 			pluginName,
-			lastActive: Date.now(),
 			crashed: false,
 		};
 		this.#sessions.set(taskId, session);
@@ -73,31 +73,16 @@ class SessionManager {
 
 	updateSession(
 		taskId: string,
-		updates: Partial<
-			Pick<
-				BrowserSession,
-				| "currentUrl"
-				| "currentTitle"
-				| "pluginName"
-				| "crashed"
-				| "currentSnapshotFingerprint"
-				| "cachePopulatedAt"
-				| "lastInteractionAt"
-				| "persistState"
-				| "profileName"
-				| "piSessionId"
-			>
-		>,
+		updates: Partial<Omit<BrowserSession, "taskId">>,
 	): void {
 		const session = this.#sessions.get(taskId);
 		if (!session) return;
-		// ponytail: the `as any` is bounded by the Partial<Pick<BrowserSession, …>>
+		// ponytail: the `as any` is bounded by the Partial<Omit<BrowserSession, "taskId">>
 		// type above — only declared session fields can land here. Skip-undefined
 		// preserves existing fields (matches the prior per-field guards).
 		for (const [k, v] of Object.entries(updates)) {
 			if (v !== undefined) (session as any)[k] = v;
 		}
-		session.lastActive = Date.now();
 	}
 
 	// ─── Last navigation storage (for session auto-recovery) ───
@@ -118,10 +103,6 @@ class SessionManager {
 
 	getLastNav(taskId: string): LastNavEntry | undefined {
 		return this.#lastNav.get(taskId);
-	}
-
-	clearLastNav(taskId: string): void {
-		this.#lastNav.delete(taskId);
 	}
 
 	// ─── Session lifecycle ────────────────────────────────────────────
@@ -154,9 +135,7 @@ class SessionManager {
 
 	getStatus(): string {
 		const active = this.getActiveSessions();
-		const crashed = Array.from(this.#sessions.values()).filter(
-			(s) => s.crashed,
-		);
+		const crashed = Array.from(this.#sessions.values()).filter((s) => s.crashed);
 
 		if (active.length === 0) {
 			if (crashed.length > 0) {
@@ -204,10 +183,6 @@ class SessionManager {
 		);
 	}
 
-	get activeCount(): number {
-		return this.getActiveSessions().length;
-	}
-
 	/**
 	 * Find the taskId for a given pi session ID.
 	 * Used by command handlers (like `/web cookies`) to resolve the correct
@@ -228,9 +203,8 @@ class SessionManager {
  * "ephemeral" (no profile) label shows as-is.
  */
 function profileDisplayName(name: string): string {
-	if (name.startsWith("_session-")) return "📋 session";
 	if (name === "ephemeral") return "ephemeral";
-	return name;
+	return getProfileLabel(name);
 }
 
 function extractDomain(url: string): string {

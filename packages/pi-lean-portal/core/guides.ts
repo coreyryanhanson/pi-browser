@@ -395,15 +395,16 @@ export function formatGuideList(): string {
 	}
 
 	const sections: string[] = ["Available guides:\n"];
+	const alpha = (a: string, b: string) => a.localeCompare(b);
 	if (api.length > 0) {
-		sections.push("API guides:", ...api.sort(), "");
+		sections.push("API guides:", ...api.sort(alpha), "");
 	}
 	sections.push(
 		"Site guides:",
-		...sites.sort(),
+		...sites.sort(alpha),
 		"",
 		"Pattern guides:",
-		...patterns.sort(),
+		...patterns.sort(alpha),
 		"",
 	);
 	sections.push(

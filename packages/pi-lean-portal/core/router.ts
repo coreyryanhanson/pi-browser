@@ -5,6 +5,7 @@
 
 import { writeFileSync } from "node:fs";
 import { BROWSER_TEMP_DIR, ensureBrowserTempDir } from "./shared/paths.js";
+import { cutAtNewline } from "./shared/temp-files.js";
 import { pluginRegistry } from "./plugin-registry.js";
 import { sessionManager } from "./shared/session-manager.js";
 import type { BrowserSession } from "./shared/session-manager.js";
@@ -20,6 +21,7 @@ import {
 	loadStorageState,
 	sanitizeProfileName,
 	sessionProfileName,
+	type StorageStateFile,
 } from "./shared/storage-state.js";
 import { loadFullConfig } from "./plugin-config.js";
 import {
@@ -170,7 +172,9 @@ function navFailure(
  * Load saved storage state for a named/session profile (if any).
  * Returns undefined when there's no profile or the file is unreadable.
  */
-function loadProfileStorageState(profileName: string | undefined): unknown {
+function loadProfileStorageState(
+	profileName: string | undefined,
+): StorageStateFile | undefined {
 	if (!profileName) return undefined;
 	try {
 		return loadStorageState(profileName) ?? undefined;
@@ -304,9 +308,7 @@ export function compactSnapshot(
 	const remaining = elementCount > 0 ? elementCount : undefined;
 
 	if (snapshot.length > COMPACT_SNAPSHOT_VERY_LARGE) {
-		let topCut = snapshot.lastIndexOf("\n", COMPACT_SNAPSHOT_TOP_LIMIT);
-		if (topCut < COMPACT_SNAPSHOT_TOP_LIMIT / 2)
-			topCut = COMPACT_SNAPSHOT_TOP_LIMIT;
+		const topCut = cutAtNewline(snapshot, COMPACT_SNAPSHOT_TOP_LIMIT);
 
 		const topSection = snapshot.slice(0, topCut);
 		const bottomHint = remaining
@@ -315,8 +317,7 @@ export function compactSnapshot(
 		return topSection + bottomHint;
 	}
 
-	let cut = snapshot.lastIndexOf("\n", COMPACT_SNAPSHOT_LIMIT);
-	if (cut < COMPACT_SNAPSHOT_LIMIT / 2) cut = COMPACT_SNAPSHOT_LIMIT;
+	const cut = cutAtNewline(snapshot, COMPACT_SNAPSHOT_LIMIT);
 
 	const topSection = snapshot.slice(0, cut);
 	const tail = remaining
@@ -324,6 +325,25 @@ export function compactSnapshot(
 		: `\n… ${snapshot.length - topSection.length} more chars`;
 
 	return topSection + tail;
+}
+
+/**
+ * Compose the compacted snapshot output block shared by all snapshot-bearing
+ * results: compacted tree + cache notice + fingerprint + optional dialog events.
+ */
+function renderSnapshotBlock(
+	raw: string,
+	elementCount: number,
+	fingerprint: string,
+	cacheResult: CacheResult | null,
+	dialogEvents?: DialogEvent[],
+): string {
+	return (
+		compactSnapshot(raw, elementCount) +
+		formatCacheNotice(cacheResult, raw.length, elementCount) +
+		`\nfingerprint:${fingerprint}` +
+		(dialogEvents ? formatDialogEvents(dialogEvents) : "")
+	);
 }
 
 /**
@@ -353,7 +373,6 @@ async function refBasedInteractionOrSnapshot(
 			const session = sessionManager.getSession(taskId);
 
 			// Cache the auto-snapshot before compaction
-			const truncated = snap.snapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 			const fingerprint = snapshotFingerprint(snap.snapshot);
 			const cacheResult = cacheSnapshot(taskId, snap.snapshot, fingerprint);
 
@@ -361,14 +380,12 @@ async function refBasedInteractionOrSnapshot(
 				success: true,
 				snapshot:
 					"Page loaded interactively. Previous element references are stale. Use the following accessibility tree to interact:\n\n" +
-					compactSnapshot(snap.snapshot, snap.elementCount) +
-					formatCacheNotice(
-						cacheResult,
-						snap.snapshot.length,
-						truncated,
+					renderSnapshotBlock(
+						snap.snapshot,
 						snap.elementCount,
-					) +
-					`\nfingerprint:${fingerprint}`,
+						fingerprint,
+						cacheResult,
+					),
 				elementCount: snap.elementCount,
 				...(session?.currentUrl ? { newUrl: session.currentUrl } : {}),
 				...(session?.currentTitle ? { newTitle: session.currentTitle } : {}),
@@ -389,20 +406,15 @@ function compactInteractionResult(
 		const newFingerprint = snapshotFingerprint(rawSnapshot);
 
 		// Cache (before compacting)
-		const truncated = rawSnapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 		const cacheResult = cacheSnapshot(taskId, rawSnapshot, newFingerprint);
 
-		const compacted = compactSnapshot(rawSnapshot, result.elementCount);
-		result.snapshot =
-			compacted +
-			formatCacheNotice(
-				cacheResult,
-				rawSnapshot.length,
-				truncated,
-				result.elementCount,
-			) +
-			`\nfingerprint:${newFingerprint}` +
-			formatDialogEvents(result.dialogEvents ?? []);
+		result.snapshot = renderSnapshotBlock(
+			rawSnapshot,
+			result.elementCount,
+			newFingerprint,
+			cacheResult,
+			result.dialogEvents,
+		);
 
 		const session = sessionManager.getSession(taskId);
 		if (session) {
@@ -485,18 +497,18 @@ export async function navigate(
 	sessionManager.updateSession(taskId, {
 		currentUrl: normalizedUrl,
 		persistState: resolvedProfileName !== undefined,
-		...(options.piSessionId !== undefined
-			? { piSessionId: options.piSessionId }
-			: {}),
+		...(options.piSessionId === undefined
+			? {}
+			: { piSessionId: options.piSessionId }),
 	});
 
 	// Set/clear profileName directly
 	const session = sessionManager.getSession(taskId)!;
 	if (session) {
-		if (resolvedProfileName !== undefined) {
-			session.profileName = resolvedProfileName;
-		} else {
+		if (resolvedProfileName === undefined) {
 			delete session.profileName;
+		} else {
+			session.profileName = resolvedProfileName;
 		}
 	}
 
@@ -506,16 +518,10 @@ export async function navigate(
 	const navOptions: {
 		signal?: AbortSignal;
 		storageState?: unknown;
-		profileName?: string;
-		profileMode?: "none" | "session" | "named";
 	} = {};
 	if (options.signal) navOptions.signal = options.signal;
 	if (loadedStorageState !== undefined) {
 		navOptions.storageState = loadedStorageState;
-	}
-	if (resolvedProfileName !== undefined) {
-		navOptions.profileName = resolvedProfileName;
-		navOptions.profileMode = profileMode;
 	}
 	const result = await plugin.navigate(
 		normalizedUrl,
@@ -567,23 +573,19 @@ export async function navigate(
 
 		// --- Cache the raw snapshot before compaction ---
 		const rawSnapshot = result.snapshot;
-		const isTruncated = rawSnapshot.length > SNAPSHOT_TRUNCATE_THRESHOLD;
 		const cacheResult: CacheResult | null = rawSnapshot
 			? cacheSnapshot(taskId, rawSnapshot, fp)
 			: null;
 		// ---
 
-		const dialogContent = formatDialogEvents(result.dialogEvents ?? []);
 		const snapshotContent = rawSnapshot
-			? compactSnapshot(rawSnapshot, result.elementCount) +
-				formatCacheNotice(
-					cacheResult,
-					rawSnapshot.length,
-					isTruncated,
+			? renderSnapshotBlock(
+					rawSnapshot,
 					result.elementCount,
-				) +
-				`\nfingerprint:${fp}` +
-				dialogContent
+					fp,
+					cacheResult,
+					result.dialogEvents,
+				)
 			: "";
 
 		// Track cache population time for staleness detection
@@ -661,12 +663,12 @@ export async function snapshot(
 			});
 		}
 		if (!full) {
-			const rawLength = result.snapshot.length;
-			const wasTruncated = rawLength > SNAPSHOT_TRUNCATE_THRESHOLD;
-			result.snapshot =
-				compactSnapshot(result.snapshot, result.elementCount) +
-				formatCacheNotice(null, rawLength, wasTruncated, result.elementCount) +
-				`\nfingerprint:${fp}`;
+			result.snapshot = renderSnapshotBlock(
+				result.snapshot,
+				result.elementCount,
+				fp,
+				null,
+			);
 		}
 		result.snapshot += formatDialogEvents(result.dialogEvents ?? []);
 	}
@@ -716,9 +718,7 @@ export async function scroll(
 	taskId: string | undefined,
 	direction: "up" | "down",
 ): Promise<InteractionResult> {
-	return wrapInteraction(taskId, (plugin, tid) =>
-		plugin.scroll(tid, direction),
-	);
+	return wrapInteraction(taskId, (plugin, tid) => plugin.scroll(tid, direction));
 }
 
 export async function goBack(taskId?: string): Promise<InteractionResult> {
@@ -930,7 +930,7 @@ export async function browserInspect(
 
 		// maxChars truncation — default ~2500 when not specified
 		const effectiveMaxChars =
-			params.maxChars !== undefined ? params.maxChars : INSPECT_DEFAULT_LIMIT;
+			params.maxChars === undefined ? INSPECT_DEFAULT_LIMIT : params.maxChars;
 		if (effectiveMaxChars > 0 && content.length > effectiveMaxChars) {
 			const remaining = content.length - effectiveMaxChars;
 			content =
@@ -963,10 +963,10 @@ export async function browserInspect(
 		const filtered = queryElementCache(
 			cache!,
 			{
-				...(params.role !== undefined ? { role: params.role } : {}),
-				...(params.name !== undefined ? { name: params.name } : {}),
-				...(params.ref !== undefined ? { ref: params.ref } : {}),
-				...(params.subtree !== undefined ? { subtree: params.subtree } : {}),
+				...(params.role === undefined ? {} : { role: params.role }),
+				...(params.name === undefined ? {} : { name: params.name }),
+				...(params.ref === undefined ? {} : { ref: params.ref }),
+				...(params.subtree === undefined ? {} : { subtree: params.subtree }),
 			},
 			status,
 		);
@@ -980,7 +980,7 @@ export async function browserInspect(
 				`filter ${filter}="${value}". Drop the ${filter} filter or adjust it.`;
 		} else {
 			content = formatElementList(filtered, {
-				...(params.ref !== undefined ? { ref: params.ref } : {}),
+				...(params.ref === undefined ? {} : { ref: params.ref }),
 			});
 		}
 

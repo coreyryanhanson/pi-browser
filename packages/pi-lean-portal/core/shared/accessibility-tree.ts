@@ -21,7 +21,10 @@ export interface AriaCachedNode {
 	raw: string;
 	/** 0-based position among siblings with the same role+name in the snapshot */
 	occurrenceIndex: number;
-	/** Ref of the nearest interactive ancestor (e.g., for subtree queries) */
+	/**
+	 * Ref of the immediately enclosing interactive ancestor; informational
+	 * wrapper roles (e.g. dialog > main > button) leave this undefined.
+	 */
 	parentRef?: string;
 }
 
@@ -65,7 +68,9 @@ export function parseSnapshot(snap: string): AriaParseResult {
 	for (const rawLine of lines) {
 		if (!rawLine.trim()) continue;
 
-		const depth = countLeadingSpaces(rawLine);
+		// Playwright's ariaSnapshot() emits 2 spaces per nesting level; index
+		// the parent stack by level, not raw space count.
+		const depth = Math.floor(countLeadingSpaces(rawLine) / 2);
 		const trimmed = rawLine.trim();
 
 		// Property lines (start with /) — pass through as-is

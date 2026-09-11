@@ -7,7 +7,11 @@ import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import * as router from "../core/router.js";
 import { taskId } from "../core/shared/task-id.js";
-import { updateFooterStatus, renderExpandedText } from "./utils.js";
+import {
+	contentText,
+	renderExpandedText,
+	updateFooterStatus,
+} from "./utils.js";
 
 export const browserSnapshotTool = defineTool({
 	name: "browser-snapshot",
@@ -26,9 +30,8 @@ export const browserSnapshotTool = defineTool({
 	}),
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-		const p = params as { full?: boolean; taskId?: string };
-		const tid = p?.taskId ?? taskId(ctx);
-		const full = p?.full ?? false;
+		const tid = taskId(ctx);
+		const full = params?.full ?? false;
 		const result = await router.snapshot(tid, full);
 		updateFooterStatus(ctx);
 
@@ -64,13 +67,12 @@ export const browserSnapshotTool = defineTool({
 	},
 
 	renderResult(result, { expanded, isPartial }, theme, _context) {
-		if (isPartial)
-			return new Text(theme.fg("warning", "Taking snapshot…"), 0, 0);
+		if (isPartial) return new Text(theme.fg("warning", "Taking snapshot…"), 0, 0);
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error) return new Text(theme.fg("error", "Snapshot failed"), 0, 0);
 		const ec = (d?.elementCount as number) ?? 0;
-		const content = (result.content?.[0] as any)?.text ?? "";
-		const isFull = !!(d?.full as boolean);
+		const content = contentText(result);
+		const isFull = Boolean(d?.full);
 		if (expanded) {
 			let text = theme.fg("accent", `📋 ${ec} elements`);
 			text += isFull ? "" : theme.fg("dim", " (compact)");

@@ -16,15 +16,19 @@ from typing import Any
 
 _SHARED_DATA_PATH = os.path.join(
     os.path.dirname(__file__),
-    "..", "..", "..",
-    "core", "shared", "browser-data.json",
+    "..",
+    "..",
+    "..",
+    "core",
+    "shared",
+    "browser-data.json",
 )
 
 
 def _load() -> dict[str, Any]:
     """Open, parse, and validate every expected key in browser-data.json."""
     try:
-        with open(_SHARED_DATA_PATH, "r") as f:
+        with open(_SHARED_DATA_PATH) as f:
             data = json.load(f)
     except Exception as exc:
         raise RuntimeError(
@@ -38,47 +42,35 @@ def _load() -> dict[str, Any]:
             f"field in {_SHARED_DATA_PATH}"
         )
 
-    # ── botSignals ──────────────────────────────────────────────
-    bot = data.get("botSignals")
-    if not isinstance(bot, dict):
-        raise RuntimeError(
-            f"[pi-lean-portal] browser-data.json: missing 'botSignals' section "
-            f"in {_SHARED_DATA_PATH}"
-        )
-    for key in ("blockSignals", "bodyOnlySignals", "bodyOnlyPatterns", "htmlSignals"):
-        if key not in bot:
+    # Required sections and their required keys.
+    required: dict[str, tuple[str, ...]] = {
+        "botSignals": (
+            "blockSignals",
+            "bodyOnlySignals",
+            "bodyOnlyPatterns",
+            "htmlSignals",
+        ),
+        "accessibility": ("interactiveRoles", "informationalRoles", "roleIcons"),
+        "navSettle": (
+            "navTimeoutMs",
+            "settleTimeoutMs",
+            "settleRaceMs",
+            "domStabilizationJs",
+        ),
+    }
+    for section, keys in required.items():
+        val = data.get(section)
+        if not isinstance(val, dict):
             raise RuntimeError(
-                f"[pi-lean-portal] browser-data.json: missing "
-                f"'botSignals.{key}' in {_SHARED_DATA_PATH}"
+                f"[pi-lean-portal] browser-data.json: missing '{section}' section "
+                f"in {_SHARED_DATA_PATH}"
             )
-
-    # ── accessibility ───────────────────────────────────────────
-    a11y = data.get("accessibility")
-    if not isinstance(a11y, dict):
-        raise RuntimeError(
-            f"[pi-lean-portal] browser-data.json: missing 'accessibility' section "
-            f"in {_SHARED_DATA_PATH}"
-        )
-    for key in ("interactiveRoles", "informationalRoles", "roleIcons"):
-        if key not in a11y:
-            raise RuntimeError(
-                f"[pi-lean-portal] browser-data.json: missing "
-                f"'accessibility.{key}' in {_SHARED_DATA_PATH}"
-            )
-
-    # ── navSettle ───────────────────────────────────────────────
-    ns = data.get("navSettle")
-    if not isinstance(ns, dict):
-        raise RuntimeError(
-            f"[pi-lean-portal] browser-data.json: missing 'navSettle' section "
-            f"in {_SHARED_DATA_PATH}"
-        )
-    for key in ("navTimeoutMs", "settleTimeoutMs", "settleRaceMs", "domStabilizationJs"):
-        if key not in ns:
-            raise RuntimeError(
-                f"[pi-lean-portal] browser-data.json: missing "
-                f"'navSettle.{key}' in {_SHARED_DATA_PATH}"
-            )
+        for key in keys:
+            if key not in val:
+                raise RuntimeError(
+                    f"[pi-lean-portal] browser-data.json: missing "
+                    f"'{section}.{key}' in {_SHARED_DATA_PATH}"
+                )
 
     return data
 

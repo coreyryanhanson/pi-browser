@@ -14,7 +14,6 @@ import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_SKIP_DIRS = ["node_modules", "docs", "__tests__"];
-const SKIP_FILES = new Set(["test-fixtures.ts"]);
 /** Entries that won't exist on disk at rest but are valid (generated at pack time, e.g. by prepack). */
 const SKIP_STALE = new Set(["LICENSE"]);
 
@@ -36,7 +35,7 @@ export interface ShipManifestResult {
  * pass `import.meta.url` directly — the helper resolves it to the test file's
  * parent directory).
  *
- * Skips: dotfiles/dotdirs, `node_modules`, `docs`, `*.test.ts`, `test-fixtures.ts`.
+ * Skips: dotfiles/dotdirs, `node_modules`, `docs`, `*.test.ts`.
  * Does NOT check: asset directories (e.g. `locales/*.json`), `exports` map,
  * `main`/`module` fields.
  *
@@ -144,7 +143,7 @@ function walkProductionTs(
 			continue;
 		}
 		if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
-		if (entry.name.endsWith(".test.ts") || SKIP_FILES.has(entry.name)) continue;
+		if (entry.name.endsWith(".test.ts")) continue;
 		out.push(relative(root, abs));
 	}
 	return out;

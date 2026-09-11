@@ -56,6 +56,29 @@ describe("validatePlugin", () => {
 		const missing = validatePlugin(plugin);
 		expect(missing).toContain("snapshot");
 	});
+
+	it("requires methods the router calls unconditionally", () => {
+		// getElementCache (browser-inspect), cookies (cookie tools), cleanupAll (shutdown)
+		const dispatchRequired = [
+			"getElementCache",
+			"getCookies",
+			"addCookies",
+			"clearCookies",
+			"cleanupAll",
+		];
+		const plugin = new MockPlugin();
+		for (const op of dispatchRequired) {
+			Object.defineProperty(plugin, op, {
+				value: undefined,
+				configurable: true,
+			});
+		}
+		const missing = validatePlugin(plugin);
+		for (const op of dispatchRequired) {
+			expect(missing).toContain(op);
+		}
+		expect(missing).not.toContain("navigate");
+	});
 });
 
 // ─── PluginRegistry.register ─────────────────────────────────────
@@ -76,9 +99,9 @@ describe("PluginRegistry.register", () => {
 		const p1 = new MockPlugin("chromium");
 		const p2 = new MockPlugin("chromium");
 		registry.register(p1, makeConfig({ name: "chromium" }));
-		expect(() =>
-			registry.register(p2, makeConfig({ name: "chromium" })),
-		).toThrow(/already registered/);
+		expect(() => registry.register(p2, makeConfig({ name: "chromium" }))).toThrow(
+			/already registered/,
+		);
 	});
 
 	it("throws on plugin missing required operations", () => {
@@ -345,12 +368,7 @@ describe("MockPlugin call tracking", () => {
 		await plugin.navigate("https://other.com", "task-2", 5000);
 		const calls = plugin.calls.get("navigate")!;
 		expect(calls).toHaveLength(2);
-		expect(calls[0]).toEqual([
-			"https://example.com",
-			"task-1",
-			30000,
-			undefined,
-		]);
+		expect(calls[0]).toEqual(["https://example.com", "task-1", 30000, undefined]);
 		expect(calls[1]).toEqual(["https://other.com", "task-2", 5000, undefined]);
 	});
 

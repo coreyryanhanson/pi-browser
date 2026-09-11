@@ -6,7 +6,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import * as router from "../core/router.js";
-import { executeInteractionTool } from "./utils.js";
+import { contentText, executeInteractionTool } from "./utils.js";
 
 export const browserBackTool = defineTool({
 	name: "browser-back",
@@ -36,12 +36,17 @@ export const browserBackTool = defineTool({
 
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
-		if (d?.error) return new Text(theme.fg("error", "Go back failed"), 0, 0);
+		if (d?.error)
+			return new Text(
+				theme.fg("error", contentText(result, "Go back failed")),
+				0,
+				0,
+			);
 		const ec = d?.elementCount as number | undefined;
 		return new Text(
 			theme.fg(
 				"dim",
-				`← ${(d?.newUrl as string) || ""}${ec !== undefined ? ` · ${ec} elements` : ""}`,
+				`← ${(d?.newUrl as string) || ""}${ec === undefined ? "" : ` · ${ec} elements`}`,
 			),
 			0,
 			0,

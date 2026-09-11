@@ -7,7 +7,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { webFetch } from "../core/fetch-backend.js";
 import { taskId } from "../core/shared/task-id.js";
-import { renderExpandedText } from "./utils.js";
+import { contentText, renderExpandedText } from "./utils.js";
 
 export const webFetchTool = defineTool({
 	name: "web-fetch",
@@ -121,10 +121,7 @@ export const webFetchTool = defineTool({
 		const d = result.details as Record<string, unknown> | undefined;
 		if (d?.error)
 			return new Text(
-				theme.fg(
-					"error",
-					`Fetch failed: ${(result.content?.[0] as any)?.text ?? "?"}`,
-				),
+				theme.fg("error", `Fetch failed: ${contentText(result, "?")}`),
 				0,
 				0,
 			);
@@ -141,7 +138,7 @@ export const webFetchTool = defineTool({
 		if (needsJS) text += ` ${theme.fg("warning", "⚠ needs JS")}`;
 		if (botDetected) text += ` ${theme.fg("warning", "⚠ bot detected")}`;
 
-		const content = (result.content?.[0] as any)?.text ?? "";
+		const content = contentText(result);
 		if (expanded) {
 			text += "\n";
 			text = renderExpandedText(text, theme, content, 500);

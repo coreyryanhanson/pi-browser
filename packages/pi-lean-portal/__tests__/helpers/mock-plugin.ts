@@ -17,7 +17,6 @@ import type {
 	EvaluateResult,
 	CookieResult,
 	ClearCookiesOptions,
-	StorageStateResult,
 	ResultBase,
 } from "../../core/plugin-api.js";
 import type { PluginConfig } from "../../core/plugin-config.js";
@@ -41,7 +40,6 @@ export class MockPlugin implements BrowserPlugin {
 	cookieResult: Partial<CookieResult> = {};
 	addCookieResult: Partial<ResultBase> = {};
 	clearCookieResult: Partial<ResultBase> = {};
-	storageStateResult: Partial<StorageStateResult> = {};
 
 	/** If set, this operation throws instead of returning */
 	shouldThrow: Set<string> = new Set();
@@ -70,8 +68,7 @@ export class MockPlugin implements BrowserPlugin {
 
 	async cleanupAll(): Promise<void> {
 		this.record("cleanupAll", []);
-		if (this.shouldThrow.has("cleanupAll"))
-			throw new Error("cleanupAll failed");
+		if (this.shouldThrow.has("cleanupAll")) throw new Error("cleanupAll failed");
 	}
 
 	async navigate(
@@ -171,8 +168,7 @@ export class MockPlugin implements BrowserPlugin {
 		options?: { fullPage?: boolean },
 	): Promise<ScreenshotResult> {
 		this.record("screenshot", [taskId, options]);
-		if (this.shouldThrow.has("screenshot"))
-			throw new Error("screenshot failed");
+		if (this.shouldThrow.has("screenshot")) throw new Error("screenshot failed");
 		return {
 			success: true,
 			dataUri: "data:image/jpeg;base64,mockdata",
@@ -225,8 +221,7 @@ export class MockPlugin implements BrowserPlugin {
 
 	async getCookies(taskId: string, urls?: string[]): Promise<CookieResult> {
 		this.record("getCookies", [taskId, urls]);
-		if (this.shouldThrow.has("getCookies"))
-			throw new Error("getCookies failed");
+		if (this.shouldThrow.has("getCookies")) throw new Error("getCookies failed");
 		return {
 			success: true,
 			cookies: [
@@ -246,8 +241,7 @@ export class MockPlugin implements BrowserPlugin {
 		cookies: import("../../core/plugin-api.js").Cookie[],
 	): Promise<ResultBase> {
 		this.record("addCookies", [taskId, cookies]);
-		if (this.shouldThrow.has("addCookies"))
-			throw new Error("addCookies failed");
+		if (this.shouldThrow.has("addCookies")) throw new Error("addCookies failed");
 		return {
 			success: true,
 			...this.addCookieResult,
@@ -264,30 +258,6 @@ export class MockPlugin implements BrowserPlugin {
 		return {
 			success: true,
 			...this.clearCookieResult,
-		};
-	}
-
-	async getStorageState(taskId: string): Promise<StorageStateResult> {
-		this.record("getStorageState", [taskId]);
-		if (this.shouldThrow.has("getStorageState"))
-			throw new Error("getStorageState failed");
-		return {
-			success: true,
-			cookies: [
-				{
-					name: "mock",
-					value: "value",
-					domain: ".example.com",
-					path: "/",
-				},
-			],
-			origins: [
-				{
-					origin: "https://example.com",
-					localStorage: [],
-				},
-			],
-			...this.storageStateResult,
 		};
 	}
 }

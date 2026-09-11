@@ -1,0 +1,11 @@
+{
+	"rules": {
+		"style": {
+			"disable": [
+				"no-console-except-error",
+				"no-non-null-assertion",
+				"nested-ternary"
+			]
+		}
+	}
+}

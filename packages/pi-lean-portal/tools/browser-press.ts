@@ -55,7 +55,8 @@ export const browserPressTool = defineTool({
 
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
-		if (d?.error) return new Text(theme.fg("error", "Press failed"), 0, 0);
+		if (d?.error)
+			return new Text(theme.fg("error", `Press failed: ${d.error}`), 0, 0);
 		const ec = d?.elementCount as number | undefined;
 		const nu = d?.newUrl as string | undefined;
 		if (nu) {

@@ -42,12 +42,13 @@ export const browserScrollTool = defineTool({
 
 	renderResult(result, _options, theme, _context) {
 		const d = result.details as Record<string, unknown> | undefined;
-		if (d?.error) return new Text(theme.fg("error", "Scroll failed"), 0, 0);
+		if (d?.error)
+			return new Text(theme.fg("error", `Scroll failed: ${d.error}`), 0, 0);
 		const ec = d?.elementCount as number | undefined;
 		return new Text(
 			theme.fg(
 				"dim",
-				`↕ ${d?.direction || "?"}${ec !== undefined ? ` · ${ec} elements` : ""}`,
+				`↕ ${d?.direction || "?"}${ec === undefined ? "" : ` · ${ec} elements`}`,
 			),
 			0,
 			0,

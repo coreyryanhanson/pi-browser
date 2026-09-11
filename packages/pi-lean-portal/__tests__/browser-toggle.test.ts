@@ -15,7 +15,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { TOOLSET_EVENTS, setDefaultResolutionMode } from "pi-tool-masking";
+import { TOOLSET_EVENTS } from "pi-tool-masking";
 import browserToggle, {
 	getToggleState,
 	getLearnState,
@@ -336,13 +336,22 @@ describe("getConversationDefaultProfile", () => {
 });
 
 // ==================================================================
-//  Focus-mode guard (Fix 3) — /web on/off/learn refuse during inclusion
+//  Focus-mode guard — /web on/off/learn refuse during allowlist focus
 // ==================================================================
 describe("/web focus-mode guard", () => {
-	it("refuses /web on/off/learn while inclusion focus is active", async () => {
+	// The published library type doesn't name "allowlist", so we set the
+	// shared module state directly — mirroring what an allowlist-capable
+	// consumer's restore writes into globalThis.
+	function focusAllowlistForTest(): void {
+		(globalThis as any)[MODULE_STATE_KEY] = {
+			defaultResolutionMode: "allowlist",
+		};
+	}
+
+	it("refuses /web on/off/learn while allowlist focus is active", async () => {
 		const { pi } = mockPi([]);
 		browserToggle(pi);
-		setDefaultResolutionMode(pi, "inclusion");
+		focusAllowlistForTest();
 
 		for (const sub of ["on", "off", "learn"]) {
 			(pi.setActiveTools as any).mockClear();
@@ -350,24 +359,24 @@ describe("/web focus-mode guard", () => {
 			await captureWebHandler(pi)(sub, ctx);
 
 			expect(ctx.ui.notify).toHaveBeenCalledWith(
-				expect.stringContaining("Another plugin has active inclusion mode"),
+				expect.stringContaining("Focus mode (allowlist) is active"),
 				"warning",
 			);
 			expect(pi.setActiveTools).not.toHaveBeenCalled();
 		}
 	});
 
-	it("read-only subcommands unaffected by inclusion focus", async () => {
+	it("read-only subcommands unaffected by allowlist focus", async () => {
 		const { pi } = mockPi([]);
 		browserToggle(pi);
-		setDefaultResolutionMode(pi, "inclusion");
+		focusAllowlistForTest();
 
 		for (const sub of ["status", "profile", "cookies", ""]) {
 			const ctx = mockCtx();
 			await captureWebHandler(pi)(sub, ctx);
 
 			expect(ctx.ui.notify).not.toHaveBeenCalledWith(
-				expect.stringContaining("Another plugin has active inclusion mode"),
+				expect.stringContaining("Focus mode (allowlist) is active"),
 				"warning",
 			);
 		}
@@ -382,36 +391,12 @@ describe("/web focus-mode guard", () => {
 		await captureWebHandler(pi)("on", ctx);
 
 		expect(ctx.ui.notify).not.toHaveBeenCalledWith(
-			expect.stringContaining("Another plugin has active inclusion mode"),
+			expect.stringContaining("Focus mode (allowlist) is active"),
 			"warning",
 		);
 		const finalActive = pi.getActiveTools();
 		for (const name of BROWSER_TOOL_NAMES) {
 			expect(finalActive).toContain(name);
-		}
-	});
-
-	// Allowlist focus (an upstream pi-tool-masking consumer) holds the line
-	// the same way inclusion does. The published library type doesn't name
-	// "allowlist", so we set the shared module state directly — mirroring what
-	// an allowlist-capable consumer's restore writes into globalThis.
-	it("refuses /web on/off/learn while allowlist focus is active", async () => {
-		const { pi } = mockPi([]);
-		browserToggle(pi);
-		(globalThis as any)[MODULE_STATE_KEY] = {
-			defaultResolutionMode: "allowlist",
-		};
-
-		for (const sub of ["on", "off", "learn"]) {
-			(pi.setActiveTools as any).mockClear();
-			const ctx = mockCtx();
-			await captureWebHandler(pi)(sub, ctx);
-
-			expect(ctx.ui.notify).toHaveBeenCalledWith(
-				expect.stringContaining("Focus mode (allowlist) is active"),
-				"warning",
-			);
-			expect(pi.setActiveTools).not.toHaveBeenCalled();
 		}
 	});
 });

@@ -10,12 +10,10 @@ import {
 } from "pi-tool-masking";
 import type { ToolsetSpec } from "pi-tool-masking";
 
-// Focus-mode guard: refuse actuating subcommands while the library holds the
-// line — inclusion mode or allowlist focus (an upstream pi-tool-masking
-// consumer).
+// Focus-mode guard: refuse actuating subcommands while allowlist focus is
+// holding the line (an upstream pi-tool-masking consumer).
 function isFocusHolding(): boolean {
-	const mode = getDefaultResolutionMode();
-	return mode === "inclusion" || mode === "allowlist";
+	return getDefaultResolutionMode() === "allowlist";
 }
 
 // ---- Toolset specs -----------------------------------------------
@@ -143,19 +141,16 @@ export default function initBrowserToggle(pi: ExtensionAPI) {
 		handler: async (args, ctx) => {
 			const cmd = args.trim().toLowerCase();
 
-			// Focus-mode guard: refuse actuating subcommands while the
-			// library holds the line — either inclusion mode or allowlist focus
-			// (an upstream pi-tool-masking consumer). Either way a sibling
-			// toggle must not write a focus-indistinguishable {enabled} entry.
+			// Focus-mode guard: refuse actuating subcommands while allowlist
+			// focus holds the line (an upstream pi-tool-masking consumer) —
+			// a sibling toggle must not write a focus-indistinguishable
+			// {enabled} entry.
 			// Read-only subcommands (status/profile/cookies/bare /web) stay
 			// unguarded, matching the focus controller's treatment of its own
 			// read-only commands.
 			if (["on", "off", "learn"].includes(cmd) && isFocusHolding()) {
-				const inInclusion = getDefaultResolutionMode() === "inclusion";
 				ctx.ui.notify(
-					inInclusion
-						? "Another plugin has active inclusion mode — this toolset can't be toggled while inclusion is holding the line. Deactivate it there first."
-						: "Focus mode (allowlist) is active — this toolset can't be toggled while focus is holding the line. Exit focus there first.",
+					"Focus mode (allowlist) is active — this toolset can't be toggled while focus is holding the line. Exit focus there first.",
 					"warning",
 				);
 				return;

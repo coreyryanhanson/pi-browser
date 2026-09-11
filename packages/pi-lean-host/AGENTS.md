@@ -155,7 +155,7 @@ read by `pi-tool-masking`. The two `ToolsetSpec`s (defined in `core/api-toggle.t
 credentials live in the per-domain secrets store, not `settings.json`.
 
 **Focus-mode guard:** actuating subcommands (`on`/`off`/`learn`) are refused
-while `pi-tool-masking` holds focus (inclusion mode or allowlist focus) — a
+while `pi-tool-masking` holds allowlist focus — a
 sibling toggle must not write a focus-indistinguishable `{enabled}` entry.
 Read-only subcommands (`status`, `helpers`, bare `/api`) stay unguarded.
 

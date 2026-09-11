@@ -38,13 +38,11 @@ import { getAllHelpers, getDisabledHelperDomains } from "./local-helpers.js";
 import { resolveProvisionedParentDomain } from "./auth.js";
 import { listNames } from "./secrets-store.js";
 
-// Focus-mode guard: refuse actuating subcommands while the library holds the
-// line — inclusion mode or allowlist focus (an upstream pi-tool-masking
-// consumer). Either way a sibling toggle must not write a focus-
-// indistinguishable {enabled} entry.
+// Focus-mode guard: refuse actuating subcommands while allowlist focus holds
+// (an upstream pi-tool-masking consumer). A sibling toggle must not write a
+// focus-indistinguishable {enabled} entry.
 function isFocusHolding(): boolean {
-	const mode = getDefaultResolutionMode();
-	return mode === "inclusion" || mode === "allowlist";
+	return getDefaultResolutionMode() === "allowlist";
 }
 
 // ---- Toolset specs -----------------------------------------------
@@ -366,11 +364,8 @@ async function handleBootstrapSubcommand(
 	// loud fail if the focus-mode guard blocks the enable. Learn stays off.
 	if (!hooks.learnEnabled()) {
 		if (isFocusHolding()) {
-			const inInclusion = getDefaultResolutionMode() === "inclusion";
 			ctx.ui.notify(
-				inInclusion
-					? "Another plugin has active inclusion mode — bootstrap needs to enable learn mode, which can't be toggled while inclusion is holding the line. Deactivate it there first."
-					: "Focus mode (allowlist) is active — bootstrap needs to enable learn mode, which can't be toggled while focus is holding the line. Exit focus there first.",
+				"Focus mode (allowlist) is active — bootstrap needs to enable learn mode, which can't be toggled while focus is holding the line. Exit focus there first.",
 				"warning",
 			);
 			return;
@@ -426,17 +421,13 @@ export default function initApiToggle(pi: ExtensionAPI): void {
 			const sub = parts[0]?.toLowerCase() ?? "";
 			const rest = parts.slice(1).join(" ");
 
-			// Focus-mode guard: refuse actuating subcommands while the library
-			// holds the line — either inclusion mode or allowlist focus (an
-			// upstream pi-tool-masking consumer). Either way a sibling toggle
-			// must not write a focus-indistinguishable {enabled} entry.
+			// Focus-mode guard: refuse actuating subcommands while allowlist
+			// focus holds (an upstream pi-tool-masking consumer) — a sibling
+			// toggle must not write a focus-indistinguishable {enabled} entry.
 			// Read-only subcommands (status/helpers/bare /api) stay unguarded.
 			if (["on", "off", "learn"].includes(sub) && isFocusHolding()) {
-				const inInclusion = getDefaultResolutionMode() === "inclusion";
 				ctx.ui.notify(
-					inInclusion
-						? "Another plugin has active inclusion mode — this toolset can't be toggled while inclusion is holding the line. Deactivate it there first."
-						: "Focus mode (allowlist) is active — this toolset can't be toggled while focus is holding the line. Exit focus there first.",
+					"Focus mode (allowlist) is active — this toolset can't be toggled while focus is holding the line. Exit focus there first.",
 					"warning",
 				);
 				return;

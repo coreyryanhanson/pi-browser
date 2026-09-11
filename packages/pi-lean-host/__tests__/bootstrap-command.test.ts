@@ -18,7 +18,6 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { setDefaultResolutionMode } from "pi-tool-masking";
 import {
 	setSecretsDir,
 	getSecretsDir,
@@ -30,6 +29,16 @@ import initApiToggle, { _resetToggleStateForTest } from "../core/api-toggle.js";
 const REGISTRY_KEY = "__piToolMaskingRegistry";
 const RESTORE_EVENT_KEY = "__piToolMaskingLastRestoreEvent";
 const MODULE_STATE_KEY = "__piToolMaskingModuleState";
+
+// Seed the masking library's module state directly: the focus guard reads
+// getDefaultResolutionMode() from this same global, so tests can hold focus
+// without the deprecated setDefaultResolutionMode entry write.
+function focusAllowlistForTest(ids: string[]): void {
+	(globalThis as any)[MODULE_STATE_KEY] = {
+		defaultResolutionMode: "allowlist",
+		activeAllowlist: [...ids],
+	};
+}
 
 let tmpSecrets = "";
 let savedSecretsDir = "";
@@ -244,18 +253,18 @@ describe("bootstrap — inject-and-exit", () => {
 
 	it("focus-mode holding + learn off → loud fail, no injection, no toolset write", async () => {
 		const { pi, sendUserMessage, setActiveTools } = mockPi([]);
-		setDefaultResolutionMode(pi, "inclusion");
+		focusAllowlistForTest(["pi-lean-dimension.api"]);
 		initApiToggle(pi);
 		const ctx = mockCtx();
 		await captureApiHandler(pi)("bootstrap oauth osm.invalid https://docs", ctx);
-		expect(out.call(null, ctx)).toContain("inclusion mode");
+		expect(out.call(null, ctx)).toContain("Focus mode (allowlist)");
 		expect(sendUserMessage).not.toHaveBeenCalled();
 		expect(setActiveTools).not.toHaveBeenCalled();
 	});
 
 	it("focus-mode holding + learn already on → proceeds (flip is the only guarded actuation)", async () => {
 		const { pi, sendUserMessage, setActiveTools } = mockPi(); // learn on
-		setDefaultResolutionMode(pi, "inclusion");
+		focusAllowlistForTest(["pi-lean-dimension.api"]);
 		initApiToggle(pi);
 		const ctx = mockCtx();
 		await captureApiHandler(pi)("bootstrap oauth osm.invalid https://docs", ctx);

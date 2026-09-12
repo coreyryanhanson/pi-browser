@@ -13,7 +13,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
-import { appendFooter, contentText } from "./utils.js";
+import { appendFooter } from "./utils.js";
 import {
 	loadAllGuides,
 	findGuidesByDomain,

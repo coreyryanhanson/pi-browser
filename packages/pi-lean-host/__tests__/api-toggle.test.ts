@@ -78,7 +78,10 @@ interface MockPi {
 function mockPi(initialTools?: string[]): MockPi {
 	let active = initialTools ?? ALL_TOOLS.map((t) => t.name);
 	const eventEmitter = new EventEmitter();
-	const handlers = new Map<string, Array<(...args: any[]) => void>>();
+	const handlers = new Map<
+		string,
+		Array<(...args: any[]) => void | Promise<void>>
+	>();
 
 	const pi = {
 		getAllTools: vi.fn(() => ALL_TOOLS as any),
@@ -89,10 +92,15 @@ function mockPi(initialTools?: string[]): MockPi {
 		appendEntry: vi.fn(),
 		registerCommand: vi.fn(),
 		registerTool: vi.fn(),
-		on: vi.fn(<T>(event: string, handler: (event: T, ctx: any) => void) => {
-			if (!handlers.has(event)) handlers.set(event, []);
-			handlers.get(event)!.push(handler as any);
-		}),
+		on: vi.fn(
+			<T>(
+				event: string,
+				handler: (event: T, ctx: any) => void | Promise<void>,
+			) => {
+				if (!handlers.has(event)) handlers.set(event, []);
+				handlers.get(event)!.push(handler as any);
+			},
+		),
 		get events() {
 			return {
 				emit: (channel: string, data: unknown) => eventEmitter.emit(channel, data),

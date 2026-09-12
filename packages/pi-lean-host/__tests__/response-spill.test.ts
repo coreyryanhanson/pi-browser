@@ -114,7 +114,6 @@ describe("spillResponse() — basic spill", () => {
 			expected = JSON.parse(json);
 		} catch {
 			expect.fail("JSON parse failed");
-			return;
 		}
 		expect(parsed).toEqual(expected);
 	});

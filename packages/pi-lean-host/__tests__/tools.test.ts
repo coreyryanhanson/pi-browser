@@ -1597,7 +1597,6 @@ describe("api-fetch", () => {
 			parsed = JSON.parse(fileContent);
 		} catch {
 			expect.fail("Spill file contains invalid JSON");
-			return;
 		}
 		expect(Array.isArray((parsed as Record<string, unknown>).results)).toBe(true);
 		expect(

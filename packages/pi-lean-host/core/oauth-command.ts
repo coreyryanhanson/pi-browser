@@ -788,7 +788,7 @@ async function wizardFields(
 		GRANT_ITEMS,
 	);
 	if (grant === undefined) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	let redirectUri: string | undefined;
@@ -805,11 +805,12 @@ async function wizardFields(
 			)
 		)?.trim();
 		if (raw === undefined) {
-			await cancelled();
+			cancelled();
 			return undefined;
 		}
 		if (raw !== "") redirectUri = raw;
 	}
+	// ast-grep-ignore: hardcoded-url
 	const tokenUrl = (
 		await ctx.ui.input(
 			`Token endpoint URL for '${storeDomain}'`,
@@ -817,7 +818,7 @@ async function wizardFields(
 		)
 	)?.trim();
 	if (!tokenUrl) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	// Store-name rule: client-id/secret are picked from provisioned secrets —
@@ -836,7 +837,7 @@ async function wizardFields(
 		names,
 	);
 	if (clientId === undefined) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	const clientSecret = await ctx.ui.select(
@@ -844,7 +845,7 @@ async function wizardFields(
 		grant === "client_credentials" ? names : [OMIT_SECRET, ...names],
 	);
 	if (clientSecret === undefined) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	// A public PKCE client (secret omitted) sends no client credentials —
@@ -860,7 +861,7 @@ async function wizardFields(
 					AUTH_METHOD_ITEMS,
 				)) as OAuth2TokenEndpointAuthMethod | undefined);
 	if (tokenEndpointAuthMethod === undefined) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	if (grant === "client_credentials") {
@@ -874,6 +875,7 @@ async function wizardFields(
 			},
 		};
 	}
+	// ast-grep-ignore: hardcoded-url
 	const authorizeUrl = (
 		await ctx.ui.input(
 			`Authorization endpoint URL for '${storeDomain}'`,
@@ -881,7 +883,7 @@ async function wizardFields(
 		)
 	)?.trim();
 	if (!authorizeUrl) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	const scopesRaw = await ctx.ui.input(
@@ -889,7 +891,7 @@ async function wizardFields(
 		"e.g. read,profile — empty to skip",
 	);
 	if (scopesRaw === undefined) {
-		await cancelled();
+		cancelled();
 		return undefined;
 	}
 	const scopes = scopesRaw

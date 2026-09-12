@@ -58,7 +58,7 @@ afterAll(() => {
 });
 
 /** Stage a guide's recipe into the guides dir (dirName = slug(shortName)). */
-function writeGuide(shortName: string, domain: string, recipe: string): void {
+function writeGuide(shortName: string, recipe: string): void {
 	const dirName = slug(shortName);
 	mkdirSync(join(tmpGuidesDir, dirName), { recursive: true });
 	writeFileSync(join(tmpGuidesDir, dirName, "guide.md"), recipe, "utf-8");
@@ -192,7 +192,7 @@ describe("api-scaffold", () => {
 	});
 
 	it("neither verify nor helper → validation error, no /tmp write", async () => {
-		writeGuide("Scaff", "scaff.example", mixedRecipe("scaff.example", "Scaff"));
+		writeGuide("Scaff", mixedRecipe("scaff.example", "Scaff"));
 		const res = await callScaffold({ domain: "scaff.example" });
 		const text = contentText(res);
 		expect(res.details).toMatchObject({ error: "nothing_to_scaffold" });
@@ -202,11 +202,7 @@ describe("api-scaffold", () => {
 	});
 
 	it("helper: true → commented-out stub written to the staged dir", async () => {
-		writeGuide(
-			"Helper",
-			"helper.example",
-			tokenRecipe("helper.example", "Helper", "getHelper"),
-		);
+		writeGuide("Helper", tokenRecipe("helper.example", "Helper", "getHelper"));
 		const res = await callScaffold({ domain: "helper.example", helper: true });
 		const text = contentText(res);
 		expect(res.details).toMatchObject({
@@ -224,7 +220,7 @@ describe("api-scaffold", () => {
 	});
 
 	it("verify: true → sentinels for path token, required-no-default query, and every requiresAnyOf member; runnable op excluded", async () => {
-		writeGuide("Scaff", "scaff.example", mixedRecipe("scaff.example", "Scaff"));
+		writeGuide("Scaff", mixedRecipe("scaff.example", "Scaff"));
 		const res = await callScaffold({ domain: "scaff.example", verify: true });
 		expect(res.details).toMatchObject({
 			mode: "verify",
@@ -253,7 +249,7 @@ describe("api-scaffold", () => {
 	});
 
 	it("verify additive merge → existing real values preserved, new sentinels added", async () => {
-		writeGuide("Merge", "merge.example", mixedRecipe("merge.example", "Merge"));
+		writeGuide("Merge", mixedRecipe("merge.example", "Merge"));
 		// Pre-seed a guides-dir verify.json with real values for two already-
 		// satisfied params; the rest are still unsatisfiable.
 		writeFileSync(
@@ -281,7 +277,6 @@ describe("api-scaffold", () => {
 	it("no unsatisfiable params → empty verify.json scaffold", async () => {
 		writeGuide(
 			"Runnable",
-			"runnable.example",
 			`---
 schemaVersion: 1
 kind: api
@@ -313,7 +308,7 @@ operations:
 	});
 
 	it("refuse-to-overwrite → existing staged verify.json errors, names delete-then-re-call", async () => {
-		writeGuide("Ov", "ov.example", tokenRecipe("ov.example", "Ov", "getOv"));
+		writeGuide("Ov", tokenRecipe("ov.example", "Ov", "getOv"));
 		// Pre-stage a verify.json (simulating a prior scaffold).
 		mkdirSync(stagedDir("ov"), { recursive: true });
 		writeFileSync(
@@ -337,7 +332,7 @@ operations:
 	});
 
 	it("refuse-to-overwrite also gates helper.ts", async () => {
-		writeGuide("Hov", "hov.example", tokenRecipe("hov.example", "Hov", "getHov"));
+		writeGuide("Hov", tokenRecipe("hov.example", "Hov", "getHov"));
 		mkdirSync(stagedDir("hov"), { recursive: true });
 		writeFileSync(join(stagedDir("hov"), "helper.ts"), "// existing\n", "utf-8");
 		const res = await callScaffold({ domain: "hov.example", helper: true });
@@ -349,11 +344,7 @@ operations:
 	});
 
 	it("both verify + helper true → both files written to one staged dir, dirName surfaced", async () => {
-		writeGuide(
-			"Both",
-			"both.example",
-			tokenRecipe("both.example", "Both", "getBoth"),
-		);
+		writeGuide("Both", tokenRecipe("both.example", "Both", "getBoth"));
 		const res = await callScaffold({
 			domain: "both.example",
 			verify: true,
@@ -375,16 +366,8 @@ operations:
 	});
 
 	it("N-guide domain → menu without selector; guide selector scaffolds the selected one", async () => {
-		writeGuide(
-			"First",
-			"multi.example",
-			tokenRecipe("multi.example", "First", "getFirst"),
-		);
-		writeGuide(
-			"Second",
-			"multi.example",
-			tokenRecipe("multi.example", "Second", "getSecond"),
-		);
+		writeGuide("First", tokenRecipe("multi.example", "First", "getFirst"));
+		writeGuide("Second", tokenRecipe("multi.example", "Second", "getSecond"));
 
 		const menu = await callScaffold({ domain: "multi.example", verify: true });
 		const menuText = contentText(menu);
@@ -411,11 +394,7 @@ operations:
 	});
 
 	it("malformed guides-dir verify.json → clear error, no /tmp write", async () => {
-		writeGuide(
-			"Badmerge",
-			"badmerge.example",
-			tokenRecipe("badmerge.example", "Badmerge", "getBad"),
-		);
+		writeGuide("Badmerge", tokenRecipe("badmerge.example", "Badmerge", "getBad"));
 		writeFileSync(
 			join(tmpGuidesDir, "badmerge", "verify.json"),
 			"{ not valid json",
@@ -519,7 +498,7 @@ operations:
         description: item id
 ---
 `;
-		writeGuide("PathKey", "path.example", recipe);
+		writeGuide("PathKey", recipe);
 		const res = await callScaffold({ domain: "path.example", verify: true });
 		expect(res.details).toMatchObject({ mode: "verify", dirName: "pathkey" });
 		const merged = JSON.parse(

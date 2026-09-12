@@ -372,13 +372,13 @@ export function resolveJsonPath(obj: unknown, path: string): unknown {
 		if (current === null || typeof current !== "object") return undefined;
 		if (Array.isArray(current)) {
 			const idx = parseInt(part, 10);
-			if (isNaN(idx)) return undefined;
+			if (Number.isNaN(idx)) return undefined;
 			// Negative index addresses from the end; out of bounds → miss.
 			const j = idx < 0 ? idx + current.length : idx;
 			if (j < 0 || j >= current.length) return undefined;
-			current = current[j];
+			current = current[j]; // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop
 		} else {
-			current = (current as Record<string, unknown>)[part];
+			current = (current as Record<string, unknown>)[part]; // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop
 		}
 	}
 	return current;
@@ -1003,7 +1003,7 @@ export async function paginate(
 			operation.params[pagCfg.pageParam!]?.default ??
 			fallback;
 		page = typeof rawPage === "number" ? rawPage : parseInt(String(rawPage), 10);
-		if (isNaN(page)) page = fallback;
+		if (Number.isNaN(page)) page = fallback;
 	}
 
 	// Compute effective params once — used for both per-page building and result transparency.
@@ -1028,7 +1028,7 @@ export async function paginate(
 				: (params[pagCfg.pageSizeParam] ?? effectiveParams[pagCfg.pageSizeParam]);
 		effectivePageSize =
 			rawSize === undefined ? (pagCfg.pageSize ?? 50) : Number(rawSize);
-		if (isNaN(effectivePageSize)) effectivePageSize = 50;
+		if (Number.isNaN(effectivePageSize)) effectivePageSize = 50;
 	} else if (style === "cursor") {
 		// Terminal fallback for cursor is OMIT (server default applies) — no
 		// fabricated 50 like offset-limit (which needs a real number to advance
@@ -1102,7 +1102,7 @@ export async function paginate(
 		// nextLink to an internal host; when auth headers ship, the
 		// Authorization header would attach to the redirect).
 		const guardThisFetch =
-			style === "nextLink" && !!nextUrl && !opts?.skipSsrfGuard;
+			style === "nextLink" && Boolean(nextUrl) && !opts?.skipSsrfGuard;
 		if (guardThisFetch) {
 			const guard = ssrfGuard(url);
 			if (!guard.ok) {

@@ -698,7 +698,8 @@ function applyClientAuth(
 		);
 		headers["authorization"] = "Basic " + cred;
 		return [cred, `Basic ${cred}`];
-	} else if (method === "client_secret_post") {
+	}
+	if (method === "client_secret_post") {
 		form["client_secret"] = clientSecret.secret;
 	}
 	return [];

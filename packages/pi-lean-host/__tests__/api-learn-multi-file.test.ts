@@ -85,7 +85,7 @@ function dirFor(shortName: string): string {
 }
 
 /** Write guide.md (and optional siblings) directly into the guides dir. */
-function writeGuide(shortName: string, domain: string, src: string): void {
+function writeGuide(shortName: string, src: string): void {
 	const d = dirFor(shortName);
 	mkdirSync(d, { recursive: true });
 	writeFileSync(join(d, "guide.md"), src, "utf-8");
@@ -131,11 +131,7 @@ const SYNTAX_ERROR = `export default function(params, ctx) {
 
 describe("api-learn multi-file staging + save", () => {
 	it("fetch-recipe stages all present siblings (guide.md + helper + verify.json)", async () => {
-		writeGuide(
-			"Sib",
-			"sib.example",
-			recipe("sib.example", "Sib", { helper: true }),
-		);
+		writeGuide("Sib", recipe("sib.example", "Sib", { helper: true }));
 		writeFileSync(join(dirFor("Sib"), "helper.mjs"), DEFAULT_EXPORT, "utf-8");
 		writeFileSync(
 			join(dirFor("Sib"), "verify.json"),
@@ -161,7 +157,7 @@ describe("api-learn multi-file staging + save", () => {
 	});
 
 	it("edge: no siblings → fetch stages only guide.md", async () => {
-		writeGuide("Solo", "solo2.example", recipe("solo2.example", "Solo"));
+		writeGuide("Solo", recipe("solo2.example", "Solo"));
 		const text = contentText(await callLearn({ domain: "solo2.example" }));
 		expect(text).not.toContain("Siblings staged");
 		// Fetch keys the staged dir by slug(shortName) = "solo".
@@ -188,7 +184,7 @@ describe("api-learn multi-file staging + save", () => {
 
 	it("mirror-save present → overwrites the guides-dir counterpart", async () => {
 		// Guides dir already has a helper with old content.
-		writeGuide("Ov", "ov2.example", recipe("ov2.example", "Ov"));
+		writeGuide("Ov", recipe("ov2.example", "Ov"));
 		writeFileSync(join(dirFor("Ov"), "helper.mjs"), "// old\n", "utf-8");
 
 		const dir = stageRecipe("ov2.example", recipe("ov2.example", "Ov"));
@@ -201,7 +197,7 @@ describe("api-learn multi-file staging + save", () => {
 
 	it("mirror-save absent → gate refuses without confirmDeletions; re-call confirms", async () => {
 		// Guides dir has a helper; staged dir does not.
-		writeGuide("Gate", "gate.example", recipe("gate.example", "Gate"));
+		writeGuide("Gate", recipe("gate.example", "Gate"));
 		writeFileSync(join(dirFor("Gate"), "helper.mjs"), "// exists\n", "utf-8");
 
 		const dir = stageRecipe("gate.example", recipe("gate.example", "Gate"));
@@ -230,7 +226,7 @@ describe("api-learn multi-file staging + save", () => {
 	});
 
 	it("deletion gate does NOT fire on the common path (all siblings staged)", async () => {
-		writeGuide("Common", "common.example", recipe("common.example", "Common"));
+		writeGuide("Common", recipe("common.example", "Common"));
 		writeFileSync(join(dirFor("Common"), "helper.mjs"), "// h\n", "utf-8");
 
 		// fetch → stages all siblings.
@@ -436,11 +432,7 @@ describe("api-learn save-time helper validation", () => {
 describe("api-learn new:true over existing directories", () => {
 	it("distinct shortName → own dir; existing guide + siblings untouched", async () => {
 		// Existing guide "Old" (folder old/) with a helper.
-		writeGuide(
-			"Old",
-			"newdistinct.example",
-			recipe("newdistinct.example", "Old"),
-		);
+		writeGuide("Old", recipe("newdistinct.example", "Old"));
 		writeFileSync(join(dirFor("Old"), "helper.mjs"), "// keep\n", "utf-8");
 
 		// Author a NEW guide (new:true → template) with a distinct shortName.
@@ -459,7 +451,7 @@ describe("api-learn new:true over existing directories", () => {
 
 	it("same shortName → deletion gate refuses; confirmDeletions proceeds", async () => {
 		// Existing guide "Same" (folder same/) with a helper.
-		writeGuide("Same", "newsame.example", recipe("newsame.example", "Same"));
+		writeGuide("Same", recipe("newsame.example", "Same"));
 		writeFileSync(join(dirFor("Same"), "helper.mjs"), "// doomed\n", "utf-8");
 
 		// new:true template reuses shortName "Same" → self-keyed target is the
